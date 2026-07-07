@@ -12,11 +12,12 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
-import StudentProfilePage from './pages/StudentProfilePage';
+import ProfilePage from './pages/ProfilePage';
 
 // Auth pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 import AuthErrorPage from './pages/AuthErrorPage';
 
@@ -83,8 +84,6 @@ export default function App() {
         <Route path="/" element={<Layout><LandingPage /></Layout>} />
         <Route path="/projects" element={<Layout><ProjectsPage /></Layout>} />
         <Route path="/projects/:id" element={<Layout><ProjectDetailPage /></Layout>} />
-        <Route path="/profile/:id" element={<Layout><StudentProfilePage /></Layout>} />
-
         {/* ── Auth (redirect if already logged in) ───────────── */}
         <Route
           path="/auth/login"
@@ -93,6 +92,10 @@ export default function App() {
         <Route
           path="/auth/register"
           element={<GuestRoute><Layout hideFooter hideHeader><RegisterPage /></Layout></GuestRoute>}
+        />
+        <Route
+          path="/verify-email"
+          element={<GuestRoute><Layout hideFooter hideHeader><VerifyEmailPage /></Layout></GuestRoute>}
         />
         <Route path="/auth/error" element={<Layout hideFooter><AuthErrorPage /></Layout>} />
 
@@ -110,6 +113,14 @@ export default function App() {
         />
 
         {/* ── Protected: student ──────────────────────────────── */}
+        <Route
+          path="/profile/:id"
+          element={
+            <ProtectedRoute>
+              <Layout><ProfilePage /></Layout>
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={

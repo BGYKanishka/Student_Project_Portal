@@ -159,21 +159,19 @@ export default function Navbar() {
                           )}
                         </div>
                         {user.role !== 'recruiter' && (
-                          <>
-                            <Link
-                              to={user.role === 'admin' ? '/admin/dashboard' : '/dashboard'}
-                              className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              <FiGrid size={14} className="text-gray-400" /> Dashboard
-                            </Link>
-                            <Link
-                              to={`/profile/${user.id}`}
-                              className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              <FiUser size={14} className="text-gray-400" /> My Profile
-                            </Link>
-                          </>
+                          <Link
+                            to={user.role === 'admin' ? '/admin/dashboard' : '/dashboard'}
+                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <FiGrid size={14} className="text-gray-400" /> Dashboard
+                          </Link>
                         )}
+                        <Link
+                          to={`/profile/${user.id}`}
+                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <FiUser size={14} className="text-gray-400" /> My Profile
+                        </Link>
                         {unreadCount > 0 && (
                           <Link
                             to="/notifications"
@@ -272,6 +270,7 @@ export default function Navbar() {
                       {user.role !== 'recruiter' && (
                         <Link to={user.role === 'admin' ? '/admin/dashboard' : '/dashboard'} className="block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">Dashboard</Link>
                       )}
+                      <Link to={`/profile/${user.id}`} className="block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">My Profile</Link>
                       <Link to="/notifications" className="block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">
                         Notifications
                         {unreadCount > 0 && (
