@@ -84,8 +84,6 @@ export default function App() {
         <Route path="/" element={<Layout><LandingPage /></Layout>} />
         <Route path="/projects" element={<Layout><ProjectsPage /></Layout>} />
         <Route path="/projects/:id" element={<Layout><ProjectDetailPage /></Layout>} />
-        <Route path="/profile/:id" element={<Layout><ProfilePage /></Layout>} />
-
         {/* ── Auth (redirect if already logged in) ───────────── */}
         <Route
           path="/auth/login"
@@ -115,6 +113,14 @@ export default function App() {
         />
 
         {/* ── Protected: student ──────────────────────────────── */}
+        <Route
+          path="/profile/:id"
+          element={
+            <ProtectedRoute>
+              <Layout><ProfilePage /></Layout>
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={

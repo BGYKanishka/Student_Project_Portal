@@ -11,28 +11,28 @@ router.get('/', authenticate, requireRole('admin'), getAllUsers);
 router.put('/profile', authenticate, updateProfile);
 
 router.get('/:id',
-  optionalAuth,
+  authenticate,
   param('id').isInt(),
   validate,
   getUserProfile
 );
 
 router.get('/:id/followers',
-  optionalAuth,
+  authenticate,
   param('id').isInt(),
   validate,
   getFollowers
 );
 
 router.get('/:id/following',
-  optionalAuth,
+  authenticate,
   param('id').isInt(),
   validate,
   getFollowing
 );
 
 router.get('/:id/projects',
-  optionalAuth,
+  authenticate,
   param('id').isInt(),
   validate,
   getUserProjects
