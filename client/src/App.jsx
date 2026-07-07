@@ -12,7 +12,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
-import StudentProfilePage from './pages/StudentProfilePage';
+import ProfilePage from './pages/ProfilePage';
 
 // Auth pages
 import LoginPage from './pages/LoginPage';
@@ -83,7 +83,7 @@ export default function App() {
         <Route path="/" element={<Layout><LandingPage /></Layout>} />
         <Route path="/projects" element={<Layout><ProjectsPage /></Layout>} />
         <Route path="/projects/:id" element={<Layout><ProjectDetailPage /></Layout>} />
-        <Route path="/profile/:id" element={<Layout><StudentProfilePage /></Layout>} />
+        <Route path="/profile/:id" element={<Layout><ProfilePage /></Layout>} />
 
         {/* ── Auth (redirect if already logged in) ───────────── */}
         <Route

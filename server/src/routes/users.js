@@ -2,11 +2,13 @@ const express = require('express');
 const { param } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole, optionalAuth } = require('../middleware/auth');
-const { getUserProfile, getUserProjects, followUser, getAllUsers, getFollowers, getFollowing } = require('../controllers/userController');
+const { getUserProfile, getUserProjects, followUser, getAllUsers, getFollowers, getFollowing, updateProfile } = require('../controllers/userController');
 
 const router = express.Router();
 
 router.get('/', authenticate, requireRole('admin'), getAllUsers);
+
+router.put('/profile', authenticate, updateProfile);
 
 router.get('/:id',
   optionalAuth,

@@ -161,4 +161,44 @@ const getFollowing = async (req, res) => {
   }
 };
 
-module.exports = { getUserProfile, getUserProjects, followUser, getAllUsers, getFollowers, getFollowing };
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, student_id } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Name is required.' });
+    }
+
+    // Fetch user to check role
+    const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (!userResult.rows.length) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    const userRole = userResult.rows[0].role;
+
+    if (userRole === 'student' && student_id) {
+       const existing = await pool.query('SELECT id FROM users WHERE student_id = $1 AND id != $2', [student_id, userId]);
+       if (existing.rows.length) {
+         return res.status(400).json({ success: false, message: 'Student ID is already registered to another user.' });
+       }
+    }
+
+    const finalStudentId = userRole === 'student' ? (student_id || null) : null;
+
+    const result = await pool.query(
+      `UPDATE users 
+       SET name = $1, student_id = $2
+       WHERE id = $3
+       RETURNING id, name, email, profile_pic, role, student_id, created_at`,
+      [name.trim(), finalStudentId, userId]
+    );
+
+    res.json({ success: true, message: 'Profile updated successfully.', user: result.rows[0] });
+  } catch (err) {
+    console.error('[updateProfile]', err.message);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getUserProfile, getUserProjects, followUser, getAllUsers, getFollowers, getFollowing, updateProfile };
