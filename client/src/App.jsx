@@ -17,6 +17,7 @@ import ProfilePage from './pages/ProfilePage';
 // Auth pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 import AuthErrorPage from './pages/AuthErrorPage';
 
@@ -93,6 +94,10 @@ export default function App() {
         <Route
           path="/auth/register"
           element={<GuestRoute><Layout hideFooter hideHeader><RegisterPage /></Layout></GuestRoute>}
+        />
+        <Route
+          path="/verify-email"
+          element={<GuestRoute><Layout hideFooter hideHeader><VerifyEmailPage /></Layout></GuestRoute>}
         />
         <Route path="/auth/error" element={<Layout hideFooter><AuthErrorPage /></Layout>} />
 

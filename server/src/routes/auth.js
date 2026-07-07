@@ -11,6 +11,7 @@ const {
   getMe,
   completeProfile,
   registerLocal,
+  verifyEmail,
   loginLocal,
   refresh,
 } = require('../controllers/authController');
@@ -112,6 +113,13 @@ router.post(
   ],
   validate,
   registerLocal
+);
+
+router.post(
+  '/verify-email',
+  [body('token').notEmpty().withMessage('Token is required.')],
+  validate,
+  verifyEmail
 );
 
 router.post(

@@ -38,6 +38,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [touched, setTouched] = useState({});
   const navigate = useNavigate();
   const { fetchMe } = useAuthStore();
@@ -61,19 +62,24 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      await api.post('/auth/register', {
+      const res = await api.post('/auth/register', {
         name: name.trim(),
         email,
         password,
         role,
         student_id: role === 'student' ? studentId.trim() : undefined,
       });
-      await fetchMe();
-      toast.success('Account created successfully!');
-      if (role === 'recruiter') {
-        navigate('/projects', { replace: true });
+
+      if (res.data.requireVerification) {
+        setRegistrationSuccess(true);
       } else {
-        navigate('/dashboard', { replace: true });
+        await fetchMe();
+        toast.success('Account created successfully!');
+        if (role === 'recruiter') {
+          navigate('/projects', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed. Please try again.');
@@ -178,6 +184,23 @@ export default function RegisterPage() {
 
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Create account</h2>
           <p className="text-gray-500 text-sm mb-6">Choose your role to get started</p>
+
+          {registrationSuccess ? (
+            <div className="text-center py-10">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FiCheck size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Check your email</h3>
+              <p className="text-gray-500 mb-6">
+                We've sent a verification link to <span className="font-semibold text-gray-900">{email}</span>. 
+                Please verify your email address to activate your account.
+              </p>
+              <Link to="/auth/login" className="inline-block px-6 py-2.5 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors">
+                Go to Login
+              </Link>
+            </div>
+          ) : (
+            <>
 
           {/* Role selector */}
           <div className="grid grid-cols-2 gap-3 mb-6">
@@ -391,6 +414,8 @@ export default function RegisterPage() {
               Log in
             </Link>
           </p>
+          </>
+          )}
         </motion.div>
       </div>
     </div>

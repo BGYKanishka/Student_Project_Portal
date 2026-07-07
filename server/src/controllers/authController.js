@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const emitter = require('../events/eventEmitter');
 const { signToken, signRefreshToken, setTokenCookies, clearTokenCookies } = require('../utils/jwt');
+const { sendEmail } = require('../utils/email');
+
 
 // ── Google OAuth callback (shared by all flows) ──────────────────────────────
 const handleGoogleCallback = (req, res) => {
@@ -174,14 +176,33 @@ const registerLocal = async (req, res) => {
     );
 
     const newUser = insertResult.rows[0];
-    const token = signToken(newUser.id);
-    const refreshToken = signRefreshToken(newUser.id);
-    setTokenCookies(res, token, refreshToken);
+
+    const verificationToken = jwt.sign(
+      { id: newUser.id, purpose: 'email_verification' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+    
+    const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
+    
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Welcome to UOK Connect, ${name}!</h2>
+        <p>Thank you for registering. Please verify your email address by clicking the button below:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${verificationUrl}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+        </div>
+        <p style="color: #666; font-size: 14px;">If the button doesn't work, you can copy and paste this link into your browser:</p>
+        <p style="color: #666; font-size: 14px; word-break: break-all;">${verificationUrl}</p>
+      </div>
+    `;
+    
+    await sendEmail(email, 'Verify Your Email - UOK Connect', emailHtml);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful.',
-      role: newUser.role,
+      message: 'Registration successful. Please check your email to verify your account.',
+      requireVerification: true,
     });
 
     // Emit event for admin notifications (after response is sent)
@@ -189,6 +210,40 @@ const registerLocal = async (req, res) => {
   } catch (err) {
     console.error('[registerLocal]', err.message);
     res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// ── Verify Email ──────────────────────────────────────────────────────────────
+const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Verification token is required.' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.purpose !== 'email_verification') {
+      return res.status(400).json({ success: false, message: 'Invalid token purpose.' });
+    }
+
+    const result = await pool.query('SELECT id, is_email_verified FROM users WHERE id = $1', [decoded.id]);
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (result.rows[0].is_email_verified) {
+      return res.json({ success: true, message: 'Email is already verified. You can now log in.' });
+    }
+
+    await pool.query('UPDATE users SET is_email_verified = TRUE, updated_at = NOW() WHERE id = $1', [decoded.id]);
+
+    res.json({ success: true, message: 'Email verified successfully. You can now log in.' });
+  } catch (err) {
+    console.error('[verifyEmail]', err.message);
+    if (err.name === 'TokenExpiredError') {
+      return res.status(400).json({ success: false, message: 'Verification token expired. Please request a new one.' });
+    }
+    res.status(500).json({ success: false, message: 'Invalid or expired verification token.' });
   }
 };
 
@@ -219,6 +274,10 @@ const loginLocal = async (req, res) => {
     // Blocked user check
     if (user.is_blocked) {
       return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
+    }
+
+    if (!user.is_email_verified) {
+      return res.status(403).json({ success: false, message: 'Please verify your email before logging in.' });
     }
 
     if (user.role === 'admin') {
@@ -285,6 +344,7 @@ module.exports = {
   getMe,
   completeProfile,
   registerLocal,
+  verifyEmail,
   loginLocal,
   refresh,
 };

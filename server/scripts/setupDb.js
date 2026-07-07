@@ -38,6 +38,7 @@ const createTables = async () => {
         student_id     VARCHAR(50)   UNIQUE,
         admin_verified BOOLEAN       NOT NULL DEFAULT FALSE,
         is_blocked     BOOLEAN       NOT NULL DEFAULT FALSE,
+        is_email_verified BOOLEAN    NOT NULL DEFAULT FALSE,
         created_at     TIMESTAMP     NOT NULL DEFAULT NOW(),
         updated_at     TIMESTAMP     NOT NULL DEFAULT NOW()
       );
