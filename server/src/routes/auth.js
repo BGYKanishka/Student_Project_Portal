@@ -99,7 +99,31 @@ router.post(
   '/register',
   [
     body('name').trim().notEmpty().withMessage('Full name is required.'),
-    body('email').isEmail().normalizeEmail().withMessage('Valid email is required.'),
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Valid email is required.')
+      .custom((value, { req }) => {
+        const domain = value.split('@')[1];
+        
+        // List of allowed domains (University + Common providers)
+        const allowedDomains = [
+          'stu.kln.ac.lk',
+          'kln.ac.lk',
+          'gmail.com',
+          'yahoo.com',
+          'outlook.com',
+          'hotmail.com',
+          'icloud.com'
+        ];
+
+        // If the role is 'student', we strictly enforce the whitelist.
+        // (We allow recruiters to bypass this so they can use their company domains like @wso2.com)
+        if (req.body.role === 'student' && !allowedDomains.includes(domain)) {
+          throw new Error('Students must use a UOK email or a standard provider (Gmail, Yahoo, Outlook, iCloud).');
+        }
+        return true;
+      }),
     body('password')
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters.')
