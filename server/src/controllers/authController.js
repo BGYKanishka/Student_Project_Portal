@@ -1,27 +1,12 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const emitter = require('../events/eventEmitter');
 const { signToken, signRefreshToken, setTokenCookies, clearTokenCookies } = require('../utils/jwt');
 const { sendEmail } = require('../utils/email');
 
-// Lazy table initialization for refresh_tokens
-(async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token TEXT NOT NULL UNIQUE,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
-      );
-    `);
-    console.log('[AuthController] refresh_tokens table initialized.');
-  } catch (err) {
-    console.error('[AuthController Init Error]', err.message);
-  }
-})();
+// Init removed in favor of explicit migration script
 
 // ── Google OAuth callback (shared by all flows) ──────────────────────────────
 const handleGoogleCallback = async (req, res, next) => {
@@ -213,10 +198,10 @@ const registerLocal = async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    const verificationToken = jwt.sign(
-      { id: newUser.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d', audience: 'email_verify' }
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    await pool.query(
+      "UPDATE users SET verification_token = $1, verification_token_expires_at = NOW() + INTERVAL '1 day' WHERE id = $2",
+      [verificationToken, newUser.id]
     );
     
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
@@ -257,26 +242,34 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Verification token is required.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'email_verify' });
+    const result = await pool.query(
+      'SELECT id, is_email_verified, verification_token_expires_at FROM users WHERE verification_token = $1',
+      [token]
+    );
 
-    const result = await pool.query('SELECT id, is_email_verified FROM users WHERE id = $1', [decoded.id]);
     if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+      return res.status(404).json({ success: false, message: 'Invalid verification token.' });
+    }
+    
+    const user = result.rows[0];
+
+    if (new Date() > new Date(user.verification_token_expires_at)) {
+      return res.status(400).json({ success: false, message: 'Verification token expired. Please request a new one.' });
     }
 
-    if (result.rows[0].is_email_verified) {
+    if (user.is_email_verified) {
       return res.json({ success: true, message: 'Email is already verified. You can now log in.' });
     }
 
-    await pool.query('UPDATE users SET is_email_verified = TRUE, updated_at = NOW() WHERE id = $1', [decoded.id]);
+    await pool.query(
+      'UPDATE users SET is_email_verified = TRUE, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW() WHERE id = $1',
+      [user.id]
+    );
 
     res.json({ success: true, message: 'Email verified successfully. You can now log in.' });
   } catch (err) {
     console.error('[verifyEmail]', err.message);
-    if (err.name === 'TokenExpiredError') {
-      return res.status(400).json({ success: false, message: 'Verification token expired. Please request a new one.' });
-    }
-    res.status(500).json({ success: false, message: 'Invalid or expired verification token.' });
+    res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
 

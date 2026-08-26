@@ -2,22 +2,7 @@ const pool = require('../config/db');
 const cloudinary = require('../config/cloudinary');
 const emitter = require('../events/eventEmitter');
 
-// Automatically ensure the tracking table exists without needing a separate script
-(async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS project_views (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-        UNIQUE(user_id, project_id)
-      );
-    `);
-  } catch (err) {
-    console.error('Failed to initialize project_views table:', err.message);
-  }
-})();
+// Init removed in favor of explicit migration script
 
 
 const getAllProjects = async (req, res) => {
@@ -25,6 +10,11 @@ const getAllProjects = async (req, res) => {
     const { page = 1, search, tag, status = 'published' } = req.query;
     const limit = Math.min(parseInt(req.query.limit, 10) || 12, 100);
     
+    const VALID_STATUSES = ['published', 'draft', 'hidden', 'all'];
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(422).json({ success: false, message: 'Invalid status value.' });
+    }
+
     if (status !== 'published' && (!req.user || req.user.role !== 'admin')) {
       return res.status(403).json({ success: false, message: `Forbidden: Cannot view ${status} projects` });
     }

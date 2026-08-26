@@ -2,7 +2,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { Pool } = require('pg');
 
 const poolConfig = process.env.DATABASE_URL 
-  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_REJECT_UNAUTHORIZED === 'false' ? false : true } }
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } }
   : {
       host: process.env.DB_HOST,
       port: Number(process.env.DB_PORT) || 5432,
@@ -39,6 +39,8 @@ const createTables = async () => {
         admin_verified BOOLEAN       NOT NULL DEFAULT FALSE,
         is_blocked     BOOLEAN       NOT NULL DEFAULT FALSE,
         is_email_verified BOOLEAN    NOT NULL DEFAULT FALSE,
+        verification_token VARCHAR(64),
+        verification_token_expires_at TIMESTAMP,
         created_at     TIMESTAMP     NOT NULL DEFAULT NOW(),
         updated_at     TIMESTAMP     NOT NULL DEFAULT NOW()
       );
@@ -144,6 +146,28 @@ const createTables = async () => {
     `);
     await run(client, `
       CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+
+    // ── PROJECT VIEWS ────────────────────────────────────────────────────────
+    await run(client, `
+      CREATE TABLE IF NOT EXISTS project_views (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, project_id)
+      );
+    `);
+
+    // ── REFRESH TOKENS ───────────────────────────────────────────────────────
+    await run(client, `
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
     `);
 
     // ── INDEXES ───────────────────────────────────────────────────────────────

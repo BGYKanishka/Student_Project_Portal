@@ -27,6 +27,7 @@ const getUserProfile = async (req, res) => {
     
     if (!isOwnerOrAdmin) {
       delete userProfile.email;
+      delete userProfile.student_id;
     }
 
     res.json({ success: true, user: userProfile });

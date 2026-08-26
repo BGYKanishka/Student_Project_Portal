@@ -36,7 +36,7 @@ passport.use(
 
         // Existing user 
         const result = await pool.query(
-          'SELECT * FROM users WHERE google_id = $1 OR (email = $2 AND google_id IS NULL)',
+          'SELECT id, name, email, profile_pic, role, student_id, is_blocked, is_email_verified, google_id FROM users WHERE google_id = $1 OR (email = $2 AND google_id IS NULL)',
           [googleId, email]
         );
 
@@ -109,7 +109,7 @@ passport.use(
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
   try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    const result = await pool.query('SELECT id, name, email, profile_pic, role, student_id, is_blocked, is_email_verified, google_id FROM users WHERE id = $1', [id]);
     done(null, result.rows[0] || false);
   } catch (err) {
     done(err);

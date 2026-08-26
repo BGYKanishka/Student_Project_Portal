@@ -2,20 +2,7 @@ const pool = require('../config/db');
 const cloudinary = require('../config/cloudinary');
 const emitter = require('../events/eventEmitter');
 
-// Lazy module initialization: update notification constraint to support admin notification types
-(async () => {
-  try {
-    // Safely update notification constraint to support user_registered and admin_removal
-    await pool.query(`
-      ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
-      ALTER TABLE notifications ADD CONSTRAINT notifications_type_check 
-        CHECK (type IN ('like', 'follow', 'project_created', 'user_registered', 'admin_removal'));
-    `);
-    console.log('[AdminController] Lazy initialization complete.');
-  } catch (err) {
-    console.error('[AdminController Init Error]', err.message);
-  }
-})();
+// Init removed in favor of explicit migration script
 
 // Also listen on eventEmitter for UserRegistered just in case emitted manually
 emitter.on('UserRegistered', async (newUser) => {
@@ -231,9 +218,8 @@ const deleteUser = async (req, res) => {
     const publicIds = [];
     for (const row of projectsRes.rows) {
       if (row.thumbnail_url) {
-        const parts = row.thumbnail_url.split('/');
-        const lastPart = parts[parts.length - 1];
-        const pubId = lastPart.split('.')[0];
+        const match = row.thumbnail_url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        const pubId = match ? match[1] : null;
         if (pubId) publicIds.push(pubId);
       }
     }
@@ -333,9 +319,8 @@ const deleteProject = async (req, res) => {
 
     if (thumbnail_url) {
       try {
-        const parts = thumbnail_url.split('/');
-        const lastPart = parts[parts.length - 1];
-        const pubId = lastPart.split('.')[0];
+        const match = thumbnail_url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        const pubId = match ? match[1] : null;
         if (pubId) await cloudinary.api.delete_resources([pubId]);
       } catch (e) {
         console.warn('[Cloudinary Delete Warning]', e.message);
