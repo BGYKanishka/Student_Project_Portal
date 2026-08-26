@@ -98,7 +98,7 @@ router.post(
 router.post(
   '/register',
   [
-    body('name').trim().notEmpty().withMessage('Full name is required.'),
+    body('name').trim().notEmpty().withMessage('Full name is required.').escape(),
     body('email')
       .isEmail()
       .normalizeEmail()
@@ -130,7 +130,9 @@ router.post(
       .matches(/[A-Z]/)
       .withMessage('Password must contain at least one uppercase letter.')
       .matches(/[0-9]/)
-      .withMessage('Password must contain at least one number.'),
+      .withMessage('Password must contain at least one number.')
+      .matches(/[^A-Za-z0-9]/)
+      .withMessage('Password must contain at least one special character.'),
     body('role')
       .isIn(['student', 'recruiter'])
       .withMessage('Role must be student or recruiter.'),

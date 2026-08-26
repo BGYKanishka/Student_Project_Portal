@@ -66,7 +66,7 @@ app.use('/api/public', publicRoutes);
 
 // Health check
 app.get('/api/health', (req, res) =>
-  res.json({ status: 'ok', env: process.env.NODE_ENV })
+  res.json({ status: 'ok' })
 );
 
 // 404 handler
@@ -76,7 +76,11 @@ app.use((req, res) =>
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('[Error]', err.message);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('[Error]', err.message);
+  } else {
+    console.error('[Error] An error occurred.');
+  }
   res.status(err.status || 500).json({
     success: false,
     message: process.env.NODE_ENV === 'production' ? 'Internal server error.' : err.message,

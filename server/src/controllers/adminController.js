@@ -4,28 +4,7 @@ const emitter = require('../events/eventEmitter');
 
 // Init removed in favor of explicit migration script
 
-// Also listen on eventEmitter for UserRegistered just in case emitted manually
-emitter.on('UserRegistered', async (newUser) => {
-  try {
-    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    for (const adm of admins.rows) {
-      const exists = await pool.query(
-        `SELECT id FROM notifications WHERE recipient_id = $1 AND actor_id = $2 AND type = 'user_registered'`,
-        [adm.id, newUser.id]
-      );
-      if (exists.rows.length === 0) {
-        const message = `${newUser.name} just registered as a ${newUser.role}.`;
-        await pool.query(
-          `INSERT INTO notifications (recipient_id, actor_id, type, message)
-           VALUES ($1, $2, 'user_registered', $3)`,
-          [adm.id, newUser.id, message]
-        );
-      }
-    }
-  } catch (err) {
-    console.error('[Event] UserRegistered handler error:', err.message);
-  }
-});
+
 
 const getStats = async (req, res) => {
   try {
