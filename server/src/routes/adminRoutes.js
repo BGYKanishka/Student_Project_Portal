@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate, requireRole } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const validateMagicBytes = require('../middleware/validateMagicBytes');
 const adminController = require('../controllers/adminController');
 
 const router = express.Router();
@@ -14,7 +15,7 @@ router.patch('/users/:id/block', adminController.blockUser);
 router.put('/users/:id/block', adminController.blockUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.get('/projects', adminController.getProjects);
-router.post('/projects', upload.single('thumbnail'), adminController.addProjectForStudent);
+router.post('/projects', upload.single('thumbnail'), validateMagicBytes, adminController.addProjectForStudent);
 router.patch('/projects/:id', adminController.updateProject);
 router.put('/projects/:id', adminController.updateProject);
 router.delete('/projects/:id', adminController.deleteProject);

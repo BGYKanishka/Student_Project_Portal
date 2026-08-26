@@ -2,43 +2,9 @@ const pool = require('../config/db');
 const cloudinary = require('../config/cloudinary');
 const emitter = require('../events/eventEmitter');
 
-// Lazy module initialization: update notification constraint to support admin notification types
-(async () => {
-  try {
-    // Safely update notification constraint to support user_registered and admin_removal
-    await pool.query(`
-      ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
-      ALTER TABLE notifications ADD CONSTRAINT notifications_type_check 
-        CHECK (type IN ('like', 'follow', 'project_created', 'user_registered', 'admin_removal'));
-    `);
-    console.log('[AdminController] Lazy initialization complete.');
-  } catch (err) {
-    console.error('[AdminController Init Error]', err.message);
-  }
-})();
+// Init removed in favor of explicit migration script
 
-// Also listen on eventEmitter for UserRegistered just in case emitted manually
-emitter.on('UserRegistered', async (newUser) => {
-  try {
-    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    for (const adm of admins.rows) {
-      const exists = await pool.query(
-        `SELECT id FROM notifications WHERE recipient_id = $1 AND actor_id = $2 AND type = 'user_registered'`,
-        [adm.id, newUser.id]
-      );
-      if (exists.rows.length === 0) {
-        const message = `${newUser.name} just registered as a ${newUser.role}.`;
-        await pool.query(
-          `INSERT INTO notifications (recipient_id, actor_id, type, message)
-           VALUES ($1, $2, 'user_registered', $3)`,
-          [adm.id, newUser.id, message]
-        );
-      }
-    }
-  } catch (err) {
-    console.error('[Event] UserRegistered handler error:', err.message);
-  }
-});
+
 
 const getStats = async (req, res) => {
   try {
@@ -98,7 +64,7 @@ const getStats = async (req, res) => {
 const getUsers = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
     const { search, role, sort = 'newest' } = req.query;
 
@@ -231,9 +197,8 @@ const deleteUser = async (req, res) => {
     const publicIds = [];
     for (const row of projectsRes.rows) {
       if (row.thumbnail_url) {
-        const parts = row.thumbnail_url.split('/');
-        const lastPart = parts[parts.length - 1];
-        const pubId = lastPart.split('.')[0];
+        const match = row.thumbnail_url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        const pubId = match ? match[1] : null;
         if (pubId) publicIds.push(pubId);
       }
     }
@@ -258,7 +223,7 @@ const deleteUser = async (req, res) => {
 const getProjects = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
     const { search, status = 'all', sort = 'newest', userId } = req.query;
 
@@ -333,9 +298,8 @@ const deleteProject = async (req, res) => {
 
     if (thumbnail_url) {
       try {
-        const parts = thumbnail_url.split('/');
-        const lastPart = parts[parts.length - 1];
-        const pubId = lastPart.split('.')[0];
+        const match = thumbnail_url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        const pubId = match ? match[1] : null;
         if (pubId) await cloudinary.api.delete_resources([pubId]);
       } catch (e) {
         console.warn('[Cloudinary Delete Warning]', e.message);
@@ -417,6 +381,7 @@ const updateProject = async (req, res) => {
           tagArray = tags.split(',').map(s => s.trim()).filter(Boolean);
         }
       }
+      tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
     }
 
     await client.query('BEGIN');
@@ -516,6 +481,7 @@ const addProjectForStudent = async (req, res) => {
     try {
       techStackJson = JSON.stringify(Array.isArray(tech_stack) ? tech_stack : JSON.parse(tech_stack || '[]'));
       tagArray = Array.isArray(tags) ? tags : JSON.parse(tags || '[]');
+      tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
     } catch (e) {
       console.warn('Invalid JSON in tech_stack or tags:', e.message);
     }
