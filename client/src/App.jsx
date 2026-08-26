@@ -20,6 +20,7 @@ import RegisterPage from './pages/RegisterPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 import AuthErrorPage from './pages/AuthErrorPage';
+import OAuthSuccessPage from './pages/OAuthSuccessPage';
 
 // Student pages (protected)
 import DashboardPage from './pages/DashboardPage';
@@ -96,6 +97,10 @@ export default function App() {
         <Route
           path="/verify-email"
           element={<GuestRoute><Layout hideFooter hideHeader><VerifyEmailPage /></Layout></GuestRoute>}
+        />
+        <Route
+          path="/oauth-success"
+          element={<GuestRoute><Layout hideFooter hideHeader><OAuthSuccessPage /></Layout></GuestRoute>}
         />
         <Route path="/auth/error" element={<Layout hideFooter><AuthErrorPage /></Layout>} />
 

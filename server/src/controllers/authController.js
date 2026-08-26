@@ -32,35 +32,15 @@ const handleGoogleCallback = async (req, res, next) => {
     );
   }
 
-  const token = signToken(user.id);
-  const refreshToken = signRefreshToken(user.id);
-  
-  try {
-    await pool.query(
-      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
-      [user.id, refreshToken]
-    );
-  } catch (err) {
-    return next(err);
-  }
-  
-  setTokenCookies(res, token, refreshToken);
+  // Instead of setting cookies directly here, we generate a short-lived exchange token.
+  // This bypasses Safari ITP issues dropping cookies on cross-origin redirects.
+  const exchangeToken = jwt.sign({ id: user.id, role: user.role, student_id: user.student_id }, process.env.JWT_SECRET, {
+    expiresIn: '5m',
+    audience: 'oauth_exchange',
+  });
 
-  // Students who haven't added their student ID yet
-  if (user.role === 'student' && !user.student_id) {
-    return res.redirect(`${process.env.CLIENT_URL}/complete-profile`);
-  }
-
-  // Recruiter: redirect to projects listing
-  if (user.role === 'recruiter') {
-    return res.redirect(`${process.env.CLIENT_URL}/projects`);
-  }
-
-  // Admin & Student: dashboard
-  if (user.role === 'admin') {
-    return res.redirect(`${process.env.CLIENT_URL}/admin/dashboard`);
-  }
-  return res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+  const redirectUrl = `${process.env.CLIENT_URL}/oauth-success?code=${exchangeToken}`;
+  return res.redirect(redirectUrl);
 };
 
 // ── Admin: verify secret key, return a short-lived token ─────────────────────
@@ -377,6 +357,55 @@ const refresh = async (req, res) => {
   }
 };
 
+// ── OAuth Code Exchange ───────────────────────────────────────────────────────
+const exchangeOAuthCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Exchange code is required.' });
+    }
+
+    const decoded = jwt.verify(code, process.env.JWT_SECRET, { audience: 'oauth_exchange' });
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+    
+    if (!result.rows.length) {
+      return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+
+    const user = result.rows[0];
+
+    if (user.is_blocked) {
+      return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
+    }
+
+    const token = signToken(user.id);
+    const refreshToken = signRefreshToken(user.id);
+    
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, refreshToken]
+    );
+    
+    setTokenCookies(res, token, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'OAuth exchange successful.',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profile_pic: user.profile_pic,
+        role: user.role,
+        student_id: user.student_id
+      }
+    });
+  } catch (err) {
+    console.error('[exchangeOAuthCode]', err.message);
+    res.status(401).json({ success: false, message: 'Invalid or expired exchange code.' });
+  }
+};
+
 module.exports = {
   handleGoogleCallback,
   validateAdminKey,
@@ -388,4 +417,5 @@ module.exports = {
   verifyEmail,
   loginLocal,
   refresh,
+  exchangeOAuthCode,
 };

@@ -14,6 +14,7 @@ const {
   verifyEmail,
   loginLocal,
   refresh,
+  exchangeOAuthCode,
 } = require('../controllers/authController');
 
 const router = express.Router();
@@ -85,6 +86,7 @@ router.get('/google/callback', (req, res, next) => {
 router.post('/refresh', refresh);
 router.post('/logout', logout);
 router.get('/me', authenticate, getMe);
+router.post('/oauth-exchange', exchangeOAuthCode);
 
 router.post(
   '/complete-profile',
