@@ -39,7 +39,8 @@ const getUserProfile = async (req, res) => {
 const getUserProjects = async (req, res) => {
   try {
     const { id } = req.params;
-    const { page = 1, limit = 12 } = req.query;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 12, 100);
     const offset = (page - 1) * limit;
 
     const canViewDrafts = req.user && (req.user.id === parseInt(id, 10) || req.user.role === 'admin');

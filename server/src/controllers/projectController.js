@@ -22,14 +22,15 @@ const emitter = require('../events/eventEmitter');
 
 const getAllProjects = async (req, res) => {
   try {
-    const { page = 1, limit = 12, search, tag, status = 'published' } = req.query;
+    const { page = 1, search, tag, status = 'published' } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 12, 100);
     
     if (status !== 'published' && (!req.user || req.user.role !== 'admin')) {
       return res.status(403).json({ success: false, message: `Forbidden: Cannot view ${status} projects` });
     }
 
     const offset = (page - 1) * limit;
-    const params = [parseInt(limit, 10), offset];
+    const params = [limit, offset];
     let whereClause = 'WHERE 1=1';
 
     if (status !== 'all') {
@@ -165,6 +166,7 @@ const createProject = async (req, res) => {
     try {
       techStackJson = JSON.stringify(Array.isArray(tech_stack) ? tech_stack : JSON.parse(tech_stack || '[]'));
       tagArray = Array.isArray(tags) ? tags : JSON.parse(tags || '[]');
+      tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
     } catch (e) {
       console.warn('Invalid JSON in tech_stack or tags:', e.message);
     }
@@ -240,6 +242,7 @@ const updateProject = async (req, res) => {
       }
       if (tags !== undefined) {
         tagArray = Array.isArray(tags) ? tags : JSON.parse(tags || '[]');
+        tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
       }
     } catch (e) {
       console.warn('Invalid JSON in tech_stack or tags:', e.message);

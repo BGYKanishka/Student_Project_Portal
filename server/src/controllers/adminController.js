@@ -98,7 +98,7 @@ const getStats = async (req, res) => {
 const getUsers = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
     const { search, role, sort = 'newest' } = req.query;
 
@@ -258,7 +258,7 @@ const deleteUser = async (req, res) => {
 const getProjects = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
     const { search, status = 'all', sort = 'newest', userId } = req.query;
 
@@ -417,6 +417,7 @@ const updateProject = async (req, res) => {
           tagArray = tags.split(',').map(s => s.trim()).filter(Boolean);
         }
       }
+      tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
     }
 
     await client.query('BEGIN');
@@ -516,6 +517,7 @@ const addProjectForStudent = async (req, res) => {
     try {
       techStackJson = JSON.stringify(Array.isArray(tech_stack) ? tech_stack : JSON.parse(tech_stack || '[]'));
       tagArray = Array.isArray(tags) ? tags : JSON.parse(tags || '[]');
+      tagArray = tagArray.slice(0, 20).map(t => String(t).trim().slice(0, 50)).filter(Boolean);
     } catch (e) {
       console.warn('Invalid JSON in tech_stack or tags:', e.message);
     }

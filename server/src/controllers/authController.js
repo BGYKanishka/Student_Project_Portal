@@ -5,9 +5,26 @@ const emitter = require('../events/eventEmitter');
 const { signToken, signRefreshToken, setTokenCookies, clearTokenCookies } = require('../utils/jwt');
 const { sendEmail } = require('../utils/email');
 
+// Lazy table initialization for refresh_tokens
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    console.log('[AuthController] refresh_tokens table initialized.');
+  } catch (err) {
+    console.error('[AuthController Init Error]', err.message);
+  }
+})();
 
 // ── Google OAuth callback (shared by all flows) ──────────────────────────────
-const handleGoogleCallback = (req, res) => {
+const handleGoogleCallback = async (req, res, next) => {
   // Passport uses callback-style auth in the route, so req.user is set on success.
   // On failure, req.user is undefined/false and req.authInfo has the reason.
   const user = req.user;
@@ -32,6 +49,16 @@ const handleGoogleCallback = (req, res) => {
 
   const token = signToken(user.id);
   const refreshToken = signRefreshToken(user.id);
+  
+  try {
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, refreshToken]
+    );
+  } catch (err) {
+    return next(err);
+  }
+  
   setTokenCookies(res, token, refreshToken);
 
   // Students who haven't added their student ID yet
@@ -91,7 +118,15 @@ const requireAdminFlowToken = (req, res, next) => {
 };
 
 // ── Logout ───────────────────────────────────────────────────────────────────
-const logout = (req, res) => {
+const logout = async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken;
+  if (refreshToken) {
+    try {
+      await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    } catch (err) {
+      console.error('[logout] token deletion error:', err.message);
+    }
+  }
   clearTokenCookies(res);
   res.json({ success: true, message: 'Logged out successfully.' });
 };
@@ -284,6 +319,12 @@ const loginLocal = async (req, res) => {
 
     const token = signToken(user.id);
     const refreshToken = signRefreshToken(user.id);
+    
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, refreshToken]
+    );
+    
     setTokenCookies(res, token, refreshToken);
 
     res.json({
@@ -307,6 +348,12 @@ const refresh = async (req, res) => {
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET, { audience: 'refresh' });
 
+    // DB Revocation Check
+    const tokenCheck = await pool.query('SELECT id FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    if (!tokenCheck.rows.length) {
+      throw new Error('Refresh token revoked or not found.');
+    }
+
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
     if (!result.rows.length) {
       return res.status(401).json({ success: false, message: 'User not found.' });
@@ -321,6 +368,12 @@ const refresh = async (req, res) => {
 
     const newToken = signToken(user.id);
     const newRefreshToken = signRefreshToken(user.id);
+    
+    await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, newRefreshToken]
+    );
     
     setTokenCookies(res, newToken, newRefreshToken);
 
