@@ -3,6 +3,7 @@ const { body, param } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const validateMagicBytes = require('../middleware/validateMagicBytes');
 const {
   getAllProjects,
   getProject,
@@ -31,6 +32,7 @@ router.post('/',
   authenticate,
   requireRole('student'),
   upload.single('thumbnail'),
+  validateMagicBytes,
   projectValidation,
   validate,
   createProject
@@ -40,6 +42,7 @@ router.put('/:id',
   authenticate,
   requireRole('student', 'admin'),
   upload.single('thumbnail'),
+  validateMagicBytes,
   validate,
   updateProject
 );

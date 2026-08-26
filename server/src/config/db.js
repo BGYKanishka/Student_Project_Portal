@@ -2,7 +2,7 @@ require('node:dns').setDefaultResultOrder('ipv4first');
 const { Pool } = require('pg');
 
 const poolConfig = process.env.DATABASE_URL 
-  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_REJECT_UNAUTHORIZED === 'false' ? false : true } }
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } }
   : {
       host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT, 10),

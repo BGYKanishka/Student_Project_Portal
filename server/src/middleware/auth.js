@@ -8,8 +8,8 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Authentication required.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'access' });
+    const result = await pool.query('SELECT id, name, email, profile_pic, role, student_id, is_blocked, is_email_verified, google_id FROM users WHERE id = $1', [decoded.id]);
 
     if (!result.rows.length) {
       return res.status(401).json({ success: false, message: 'User not found.' });
@@ -46,8 +46,8 @@ const optionalAuth = async (req, res, next) => {
     const token = req.cookies?.token;
     if (!token) return next();
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'access' });
+    const result = await pool.query('SELECT id, name, email, profile_pic, role, student_id, is_blocked, is_email_verified, google_id FROM users WHERE id = $1', [decoded.id]);
 
     if (result.rows.length) {
       req.user = result.rows[0];

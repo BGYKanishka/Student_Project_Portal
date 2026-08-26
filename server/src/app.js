@@ -6,8 +6,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
-const session = require('express-session');
-const PgSession = require('connect-pg-simple')(session);
 const rateLimit = require('express-rate-limit');
 const passport = require('./config/passport');
 const pool = require('./config/db');
@@ -51,23 +49,10 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-
-app.use(session({
-  store: new PgSession({ pool, tableName: 'session', createTableIfMissing: false }),
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' || process.env.VERCEL === '1',
-    sameSite: (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') ? 'none' : 'lax',
-    maxAge: 10 * 60 * 1000, // 10 minutes — used only during OAuth flow
-  },
-}));
 
 app.use(passport.initialize());
 
@@ -81,7 +66,7 @@ app.use('/api/public', publicRoutes);
 
 // Health check
 app.get('/api/health', (req, res) =>
-  res.json({ status: 'ok', env: process.env.NODE_ENV })
+  res.json({ status: 'ok' })
 );
 
 // 404 handler
@@ -91,7 +76,11 @@ app.use((req, res) =>
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('[Error]', err.message);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('[Error]', err.message);
+  } else {
+    console.error('[Error] An error occurred.');
+  }
   res.status(err.status || 500).json({
     success: false,
     message: process.env.NODE_ENV === 'production' ? 'Internal server error.' : err.message,

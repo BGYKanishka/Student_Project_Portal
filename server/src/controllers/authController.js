@@ -1,13 +1,15 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const emitter = require('../events/eventEmitter');
 const { signToken, signRefreshToken, setTokenCookies, clearTokenCookies } = require('../utils/jwt');
 const { sendEmail } = require('../utils/email');
 
+// Init removed in favor of explicit migration script
 
 // ── Google OAuth callback (shared by all flows) ──────────────────────────────
-const handleGoogleCallback = (req, res) => {
+const handleGoogleCallback = async (req, res, next) => {
   // Passport uses callback-style auth in the route, so req.user is set on success.
   // On failure, req.user is undefined/false and req.authInfo has the reason.
   const user = req.user;
@@ -30,25 +32,15 @@ const handleGoogleCallback = (req, res) => {
     );
   }
 
-  const token = signToken(user.id);
-  const refreshToken = signRefreshToken(user.id);
-  setTokenCookies(res, token, refreshToken);
+  // Instead of setting cookies directly here, we generate a short-lived exchange token.
+  // This bypasses Safari ITP issues dropping cookies on cross-origin redirects.
+  const exchangeToken = jwt.sign({ id: user.id, role: user.role, student_id: user.student_id }, process.env.JWT_SECRET, {
+    expiresIn: '5m',
+    audience: 'oauth_exchange',
+  });
 
-  // Students who haven't added their student ID yet
-  if (user.role === 'student' && !user.student_id) {
-    return res.redirect(`${process.env.CLIENT_URL}/complete-profile`);
-  }
-
-  // Recruiter: redirect to projects listing
-  if (user.role === 'recruiter') {
-    return res.redirect(`${process.env.CLIENT_URL}/projects`);
-  }
-
-  // Admin & Student: dashboard
-  if (user.role === 'admin') {
-    return res.redirect(`${process.env.CLIENT_URL}/admin/dashboard`);
-  }
-  return res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+  const redirectUrl = `${process.env.CLIENT_URL}/oauth-success?code=${exchangeToken}`;
+  return res.redirect(redirectUrl);
 };
 
 // ── Admin: verify secret key, return a short-lived token ─────────────────────
@@ -65,6 +57,7 @@ const validateAdminKey = (req, res) => {
   // Short-lived (3 minutes) token — just proves the key was entered
   const adminFlowToken = jwt.sign({ adminFlow: true }, process.env.JWT_SECRET, {
     expiresIn: '3m',
+    audience: 'admin_flow',
   });
 
   res.json({ success: true, adminFlowToken });
@@ -79,7 +72,7 @@ const requireAdminFlowToken = (req, res, next) => {
     );
   }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'admin_flow' });
     if (!decoded.adminFlow) throw new Error('Not an admin flow token.');
     next();
   } catch {
@@ -90,7 +83,15 @@ const requireAdminFlowToken = (req, res, next) => {
 };
 
 // ── Logout ───────────────────────────────────────────────────────────────────
-const logout = (req, res) => {
+const logout = async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken;
+  if (refreshToken) {
+    try {
+      await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    } catch (err) {
+      console.error('[logout] token deletion error:', err.message);
+    }
+  }
   clearTokenCookies(res);
   res.json({ success: true, message: 'Logged out successfully.' });
 };
@@ -177,10 +178,10 @@ const registerLocal = async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    const verificationToken = jwt.sign(
-      { id: newUser.id, purpose: 'email_verification' },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    await pool.query(
+      "UPDATE users SET verification_token = $1, verification_token_expires_at = NOW() + INTERVAL '1 day' WHERE id = $2",
+      [verificationToken, newUser.id]
     );
     
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
@@ -221,29 +222,34 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Verification token is required.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.purpose !== 'email_verification') {
-      return res.status(400).json({ success: false, message: 'Invalid token purpose.' });
-    }
+    const result = await pool.query(
+      'SELECT id, is_email_verified, verification_token_expires_at FROM users WHERE verification_token = $1',
+      [token]
+    );
 
-    const result = await pool.query('SELECT id, is_email_verified FROM users WHERE id = $1', [decoded.id]);
     if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+      return res.status(404).json({ success: false, message: 'Invalid verification token.' });
+    }
+    
+    const user = result.rows[0];
+
+    if (new Date() > new Date(user.verification_token_expires_at)) {
+      return res.status(400).json({ success: false, message: 'Verification token expired. Please request a new one.' });
     }
 
-    if (result.rows[0].is_email_verified) {
+    if (user.is_email_verified) {
       return res.json({ success: true, message: 'Email is already verified. You can now log in.' });
     }
 
-    await pool.query('UPDATE users SET is_email_verified = TRUE, updated_at = NOW() WHERE id = $1', [decoded.id]);
+    await pool.query(
+      'UPDATE users SET is_email_verified = TRUE, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW() WHERE id = $1',
+      [user.id]
+    );
 
     res.json({ success: true, message: 'Email verified successfully. You can now log in.' });
   } catch (err) {
     console.error('[verifyEmail]', err.message);
-    if (err.name === 'TokenExpiredError') {
-      return res.status(400).json({ success: false, message: 'Verification token expired. Please request a new one.' });
-    }
-    res.status(500).json({ success: false, message: 'Invalid or expired verification token.' });
+    res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
 
@@ -286,6 +292,12 @@ const loginLocal = async (req, res) => {
 
     const token = signToken(user.id);
     const refreshToken = signRefreshToken(user.id);
+    
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, refreshToken]
+    );
+    
     setTokenCookies(res, token, refreshToken);
 
     res.json({
@@ -307,9 +319,12 @@ const refresh = async (req, res) => {
       return res.status(401).json({ success: false, message: 'No refresh token provided.' });
     }
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    if (!decoded.isRefreshToken) {
-      throw new Error('Invalid token type.');
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET, { audience: 'refresh' });
+
+    // DB Revocation Check
+    const tokenCheck = await pool.query('SELECT id FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    if (!tokenCheck.rows.length) {
+      throw new Error('Refresh token revoked or not found.');
     }
 
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
@@ -327,12 +342,67 @@ const refresh = async (req, res) => {
     const newToken = signToken(user.id);
     const newRefreshToken = signRefreshToken(user.id);
     
+    await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, newRefreshToken]
+    );
+    
     setTokenCookies(res, newToken, newRefreshToken);
 
     res.json({ success: true, message: 'Token refreshed.' });
   } catch (err) {
     clearTokenCookies(res);
     return res.status(401).json({ success: false, message: 'Invalid or expired refresh token.' });
+  }
+};
+
+// ── OAuth Code Exchange ───────────────────────────────────────────────────────
+const exchangeOAuthCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Exchange code is required.' });
+    }
+
+    const decoded = jwt.verify(code, process.env.JWT_SECRET, { audience: 'oauth_exchange' });
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+    
+    if (!result.rows.length) {
+      return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+
+    const user = result.rows[0];
+
+    if (user.is_blocked) {
+      return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
+    }
+
+    const token = signToken(user.id);
+    const refreshToken = signRefreshToken(user.id);
+    
+    await pool.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')",
+      [user.id, refreshToken]
+    );
+    
+    setTokenCookies(res, token, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'OAuth exchange successful.',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profile_pic: user.profile_pic,
+        role: user.role,
+        student_id: user.student_id
+      }
+    });
+  } catch (err) {
+    console.error('[exchangeOAuthCode]', err.message);
+    res.status(401).json({ success: false, message: 'Invalid or expired exchange code.' });
   }
 };
 
@@ -347,4 +417,5 @@ module.exports = {
   verifyEmail,
   loginLocal,
   refresh,
+  exchangeOAuthCode,
 };
