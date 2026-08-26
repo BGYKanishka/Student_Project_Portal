@@ -65,6 +65,7 @@ const validateAdminKey = (req, res) => {
   // Short-lived (3 minutes) token — just proves the key was entered
   const adminFlowToken = jwt.sign({ adminFlow: true }, process.env.JWT_SECRET, {
     expiresIn: '3m',
+    audience: 'admin_flow',
   });
 
   res.json({ success: true, adminFlowToken });
@@ -79,7 +80,7 @@ const requireAdminFlowToken = (req, res, next) => {
     );
   }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'admin_flow' });
     if (!decoded.adminFlow) throw new Error('Not an admin flow token.');
     next();
   } catch {
@@ -178,9 +179,9 @@ const registerLocal = async (req, res) => {
     const newUser = insertResult.rows[0];
 
     const verificationToken = jwt.sign(
-      { id: newUser.id, purpose: 'email_verification' },
+      { id: newUser.id },
       process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: '1d', audience: 'email_verify' }
     );
     
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
@@ -221,10 +222,7 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Verification token is required.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.purpose !== 'email_verification') {
-      return res.status(400).json({ success: false, message: 'Invalid token purpose.' });
-    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'email_verify' });
 
     const result = await pool.query('SELECT id, is_email_verified FROM users WHERE id = $1', [decoded.id]);
     if (!result.rows.length) {
@@ -307,10 +305,7 @@ const refresh = async (req, res) => {
       return res.status(401).json({ success: false, message: 'No refresh token provided.' });
     }
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    if (!decoded.isRefreshToken) {
-      throw new Error('Invalid token type.');
-    }
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET, { audience: 'refresh' });
 
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
     if (!result.rows.length) {
