@@ -1,5 +1,8 @@
+require('node:dns').setDefaultResultOrder('ipv4first');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { Pool } = require('pg');
+const readline = require('readline');
+const bcrypt = require('bcryptjs');
 
 const poolConfig = process.env.DATABASE_URL 
   ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } }
@@ -12,16 +15,16 @@ const poolConfig = process.env.DATABASE_URL
     };
 const pool = new Pool(poolConfig);
 
-const run = (client, sql) => client.query(sql);
+const run = (client, sql, params) => client.query(sql, params);
 
-const createTables = async () => {
+const setupDb = async () => {
   const client = await pool.connect();
   try {
     console.log('Connected to PostgreSQL...');
     await client.query('BEGIN');
     // Drop existing tables to apply schema changes cleanly
     await run(client, `
-      DROP TABLE IF EXISTS comments, notifications, likes, followers, project_tags, projects, users, "session" CASCADE;
+      DROP TABLE IF EXISTS comments, notifications, likes, followers, project_tags, project_views, refresh_tokens, projects, users, "session" CASCADE;
     `);
 
     // ── USERS ───────────────────────────────────────────────────────────────
@@ -87,9 +90,6 @@ const createTables = async () => {
     `);
 
     // ── COMMENTS ─────────────────────────────────────────────────────────────
-    // is_private: FALSE = public (visible to everyone, like a YouTube comment),
-    //   TRUE = private (visible only to the comment's author and admins —
-    //   NOT visible to the project owner unless they wrote it themselves)
     await run(client, `
       CREATE TABLE IF NOT EXISTS comments (
         id          SERIAL      PRIMARY KEY,
@@ -115,8 +115,6 @@ const createTables = async () => {
     `);
 
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
-    // actor_id: nullable — system notifications have no actor
-    // project_id: nullable — follow notifications have no project
     await run(client, `
       CREATE TABLE IF NOT EXISTS notifications (
         id           SERIAL      PRIMARY KEY,
@@ -124,7 +122,7 @@ const createTables = async () => {
         actor_id     INTEGER     REFERENCES users(id) ON DELETE SET NULL,
         project_id   INTEGER     REFERENCES projects(id) ON DELETE SET NULL,
         type         VARCHAR(50) NOT NULL
-                       CHECK (type IN ('like', 'follow', 'project_created', 'comment', 'user_registered', 'admin_action', 'admin_edit', 'admin_delete', 'admin_hide')),
+                       CHECK (type IN ('like', 'follow', 'project_created', 'comment', 'user_registered', 'admin_action', 'admin_edit', 'admin_delete', 'admin_hide', 'admin_removal')),
         message      TEXT        NOT NULL,
         is_private   BOOLEAN     NOT NULL DEFAULT FALSE,
         is_read      BOOLEAN     NOT NULL DEFAULT FALSE,
@@ -133,9 +131,7 @@ const createTables = async () => {
       );
     `);
 
-    // ── SESSION (connect-pg-simple) ───────────────────────────────────────────
-    // Managed by the express-session middleware; not used for application data.
-    // Separate queries because some pg drivers reject multiple statements in one call.
+    // ── SESSION ───────────────────────────────────────────────────────────────
     await run(client, `
       CREATE TABLE IF NOT EXISTS "session" (
         "sid"    VARCHAR      NOT NULL COLLATE "default",
@@ -171,45 +167,15 @@ const createTables = async () => {
     `);
 
     // ── INDEXES ───────────────────────────────────────────────────────────────
-    // projects: most queries filter by status and sort by created_at
     await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_projects_status_created
-        ON projects (status, created_at DESC);
-    `);
-    // projects: getUserProjects filters by user_id
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_projects_user_id
-        ON projects (user_id);
-    `);
-    // likes: subquery groups by project_id to count likes
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_likes_project_id
-        ON likes (project_id);
-    `);
-    // comments: fetching a project's comment thread filters by project_id
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_comments_project_id
-        ON comments (project_id);
-    `);
-    // comments: ownership checks (edit/delete, "is this mine?") filter by user_id
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_comments_user_id
-        ON comments (user_id);
-    `);
-    // project_tags: join filters by project_id
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_project_tags_project_id
-        ON project_tags (project_id);
-    `);
-    // notifications: getNotifications filters by recipient_id; markAllAsRead also filters is_read
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read
-        ON notifications (recipient_id, is_read);
-    `);
-    // followers: getUserProfile counts by following_id
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS idx_followers_following_id
-        ON followers (following_id);
+      CREATE INDEX IF NOT EXISTS idx_projects_status_created ON projects (status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects (user_id);
+      CREATE INDEX IF NOT EXISTS idx_likes_project_id ON likes (project_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_project_id ON comments (project_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments (user_id);
+      CREATE INDEX IF NOT EXISTS idx_project_tags_project_id ON project_tags (project_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read ON notifications (recipient_id, is_read);
+      CREATE INDEX IF NOT EXISTS idx_followers_following_id ON followers (following_id);
     `);
 
     // ── UPDATED_AT TRIGGER ────────────────────────────────────────────────────
@@ -224,9 +190,7 @@ const createTables = async () => {
     `);
 
     for (const table of ['users', 'projects', 'comments']) {
-      await run(client, `
-        DROP TRIGGER IF EXISTS trigger_${table}_updated_at ON ${table};
-      `);
+      await run(client, `DROP TRIGGER IF EXISTS trigger_${table}_updated_at ON ${table};`);
       await run(client, `
         CREATE TRIGGER trigger_${table}_updated_at
           BEFORE UPDATE ON ${table}
@@ -236,16 +200,112 @@ const createTables = async () => {
 
     await client.query('COMMIT');
     console.log('All tables created successfully.');
-    console.log('Tables: users, projects, project_tags, likes, comments, followers, notifications, session');
-    console.log('Indexes: status/created, user_id, likes/project, comments/project, comments/user, tags/project, notifications/recipient, followers/following');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Database setup failed:', err.message);
     process.exit(1);
   } finally {
     client.release();
-    await pool.end();
   }
 };
 
-createTables();
+const confirm = () =>
+  new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(
+      `WARNING: This will permanently delete all data in "${process.env.DB_NAME}".\nType "yes" to confirm: `,
+      (answer) => { rl.close(); resolve(answer.trim().toLowerCase()); }
+    );
+  });
+
+const resetDb = async (force) => {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('ERROR: db:reset cannot run in production. Set NODE_ENV != production.');
+    process.exit(1);
+  }
+
+  if (!force) {
+    const answer = await confirm();
+    if (answer !== 'yes') {
+      console.log('Reset cancelled.');
+      process.exit(0);
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    console.log('Resetting database...');
+    await client.query('BEGIN');
+    await client.query(`
+      TRUNCATE TABLE
+        notifications,
+        comments,
+        likes,
+        followers,
+        project_tags,
+        project_views,
+        refresh_tokens,
+        projects,
+        users,
+        "session"
+      RESTART IDENTITY
+      CASCADE;
+    `);
+    await client.query('COMMIT');
+    console.log('All tables truncated and sequences reset to 1.');
+    console.log('Schema (tables, indexes, triggers) was preserved.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Reset failed:', err.message);
+    process.exit(1);
+  } finally {
+    client.release();
+  }
+};
+
+const createAdmin = async (email, rawPassword) => {
+  const query = `
+    INSERT INTO users (name, email, role, admin_verified, is_email_verified, password) 
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (email) DO UPDATE 
+    SET password = EXCLUDED.password, 
+        role = EXCLUDED.role, 
+        admin_verified = EXCLUDED.admin_verified,
+        is_email_verified = EXCLUDED.is_email_verified,
+        name = EXCLUDED.name;
+  `;
+
+  try {
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
+    
+    await pool.query(query, ['Admin User', email, 'admin', true, true, hashedPassword]);
+    console.log(`Admin user '${email}' inserted/updated successfully!`);
+    console.log(`You can now login locally using:\n   Email: ${email}\n   Password: ${rawPassword}`);
+  } catch (err) {
+    console.error('Error executing query:', err);
+  }
+};
+
+(async () => {
+  const action = process.argv[2];
+  
+  if (action === 'setup') {
+    await setupDb();
+  } else if (action === 'reset') {
+    await resetDb(process.argv.includes('--force'));
+  } else if (action === 'create-admin') {
+    const email = process.argv[3] || process.env.ADMIN_EMAIL;
+    const password = process.argv[4] || process.env.ADMIN_PASSWORD;
+    if (!email || !password) {
+      console.error('Usage: node scripts/db.js create-admin <email> <password>');
+      process.exit(1);
+    }
+    await createAdmin(email, password);
+  } else {
+    console.error('Usage: node scripts/db.js [setup|reset|create-admin]');
+    process.exit(1);
+  }
+
+  await pool.end();
+})();

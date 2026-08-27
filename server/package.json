@@ -6,10 +6,10 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "db:setup": "node scripts/setupDb.js",
-    "db:reset": "node scripts/resetDb.js",
-    "db:reset:force": "node scripts/resetDb.js --force",
-    "db:migrate": "node scripts/migrate.js"
+    "db:setup": "node scripts/db.js setup",
+    "db:reset": "node scripts/db.js reset",
+    "db:reset:force": "node scripts/db.js reset --force",
+    "db:admin": "node scripts/db.js create-admin"
   },
   "keywords": [],
   "author": "",

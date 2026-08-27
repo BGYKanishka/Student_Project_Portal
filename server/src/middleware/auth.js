@@ -3,7 +3,7 @@ const pool = require('../config/db');
 
 const authenticate = async (req, res, next) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ success: false, message: 'Authentication required.' });
     }
@@ -43,7 +43,7 @@ const requireRole = (...roles) => (req, res, next) => {
 
 const optionalAuth = async (req, res, next) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
     if (!token) return next();
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: 'access' });
