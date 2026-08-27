@@ -12,10 +12,20 @@ const api = axios.create({
 // requests both see isRefreshing === false and both trigger a refresh.
 let refreshPromise = null;
 
+// Request interceptor to attach token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const refreshAccessToken = () => {
   if (!refreshPromise) {
+    const refreshToken = localStorage.getItem('refreshToken');
     refreshPromise = api
-      .post('/auth/refresh')
+      .post('/auth/refresh', { refreshToken })
       .finally(() => {
         refreshPromise = null;
       });
@@ -24,7 +34,15 @@ const refreshAccessToken = () => {
 };
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    if (res.data?.token) {
+      localStorage.setItem('token', res.data.token);
+    }
+    if (res.data?.refreshToken) {
+      localStorage.setItem('refreshToken', res.data.refreshToken);
+    }
+    return res;
+  },
   async (err) => {
     const originalRequest = err.config;
 

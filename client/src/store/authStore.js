@@ -11,6 +11,8 @@ const useAuthStore = create((set) => ({
       const res = await api.get('/auth/me');
       set({ user: res.data.user, loading: false, initialized: true });
     } catch {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       set({ user: null, loading: false, initialized: true });
     }
   },
@@ -19,13 +21,19 @@ const useAuthStore = create((set) => ({
     try {
       await api.post('/auth/logout');
     } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       set({ user: null });
       window.location.href = '/';
     }
   },
 
   setUser: (user) => set({ user }),
-  clearUser: () => set({ user: null }),
+  clearUser: () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    set({ user: null });
+  },
 }));
 
 export default useAuthStore;

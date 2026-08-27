@@ -304,6 +304,8 @@ const loginLocal = async (req, res) => {
       success: true,
       message: 'Login successful.',
       role: user.role,
+      token,
+      refreshToken,
     });
   } catch (err) {
     console.error('[loginLocal]', err.message);
@@ -314,7 +316,7 @@ const loginLocal = async (req, res) => {
 // ── Refresh Token ─────────────────────────────────────────────────────────────
 const refresh = async (req, res) => {
   try {
-    const refreshToken = req.cookies?.refreshToken;
+    const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
     if (!refreshToken) {
       return res.status(401).json({ success: false, message: 'No refresh token provided.' });
     }
@@ -350,7 +352,7 @@ const refresh = async (req, res) => {
     
     setTokenCookies(res, newToken, newRefreshToken);
 
-    res.json({ success: true, message: 'Token refreshed.' });
+    res.json({ success: true, message: 'Token refreshed.', token: newToken, refreshToken: newRefreshToken });
   } catch (err) {
     clearTokenCookies(res);
     return res.status(401).json({ success: false, message: 'Invalid or expired refresh token.' });
@@ -391,6 +393,8 @@ const exchangeOAuthCode = async (req, res) => {
     res.json({
       success: true,
       message: 'OAuth exchange successful.',
+      token,
+      refreshToken,
       user: {
         id: user.id,
         name: user.name,
