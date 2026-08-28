@@ -91,7 +91,7 @@ const getUsers = async (req, res) => {
 
     const queryParams = [...params, limit, offset];
     const dataQuery = `
-      SELECT u.id, u.google_id, u.name, u.email, u.profile_pic, u.role, u.student_id, u.admin_verified, u.is_blocked, u.created_at, u.updated_at, 
+      SELECT u.id, u.asgardeo_id, u.name, u.email, u.profile_pic, u.role, u.student_id, u.admin_verified, u.is_blocked, u.created_at, u.updated_at, 
         (SELECT COUNT(*) FROM projects WHERE user_id = u.id)::int AS project_count,
         (SELECT COUNT(*) FROM followers WHERE following_id = u.id)::int AS follower_count
       FROM users u
@@ -119,7 +119,7 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const userRes = await pool.query(`
-      SELECT u.id, u.google_id, u.name, u.email, u.profile_pic, u.role, u.student_id, u.admin_verified, u.is_blocked, u.created_at, u.updated_at,
+      SELECT u.id, u.asgardeo_id, u.name, u.email, u.profile_pic, u.role, u.student_id, u.admin_verified, u.is_blocked, u.created_at, u.updated_at,
         (SELECT COUNT(*) FROM projects WHERE user_id = u.id)::int AS project_count,
         (SELECT COUNT(*) FROM followers WHERE following_id = u.id)::int AS follower_count,
         (SELECT COUNT(*) FROM followers WHERE follower_id = u.id)::int AS following_count,
