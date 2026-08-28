@@ -12,6 +12,7 @@ const checkJwt = jwt({
   }),
   // We allow both with/without trailing slash for safety
   issuer: [`${process.env.ASGARDEO_BASE_URL}/oauth2/token`, `${process.env.ASGARDEO_BASE_URL}/oauth2/token/`],
+  audience: process.env.ASGARDEO_CLIENT_ID,
   algorithms: ['RS256'],
   requestProperty: 'auth' // Places decoded token at req.auth
 });
@@ -77,6 +78,7 @@ const optionalAuth = [
       jwksUri: `${process.env.ASGARDEO_BASE_URL}/oauth2/jwks`
     }),
     issuer: [`${process.env.ASGARDEO_BASE_URL}/oauth2/token`, `${process.env.ASGARDEO_BASE_URL}/oauth2/token/`],
+    audience: process.env.ASGARDEO_CLIENT_ID,
     algorithms: ['RS256'],
     requestProperty: 'auth',
     credentialsRequired: false
