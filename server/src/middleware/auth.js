@@ -89,4 +89,4 @@ const optionalAuth = [
   }
 ];
 
-module.exports = { authenticate, requireRole, optionalAuth, checkJwt };
+module.exports = { authenticate, requireRole, optionalAuth, checkJwt, attachUser };

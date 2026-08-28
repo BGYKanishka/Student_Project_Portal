@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthContext } from '@asgardeo/auth-react';
 import useAuthStore from './store/authStore';
@@ -33,6 +33,7 @@ import AdminNotifications from './pages/admin/AdminNotifications';
 function AuthSync({ children }) {
   const { state, getAccessToken, signIn, signOut } = useAuthContext();
   const { syncUser, initialized, setLoading } = useAuthStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Provide the token fetcher to api.js
@@ -44,6 +45,8 @@ function AuthSync({ children }) {
         const res = await syncUser();
         if (!res.success && !res.requireProfile) {
           signOut();
+        } else if (res.requireProfile) {
+          navigate('/complete-profile');
         }
       } else if (!state.isAuthenticated && state.isLoading === false) {
         setLoading(false);
@@ -51,7 +54,7 @@ function AuthSync({ children }) {
     };
     
     sync();
-  }, [state.isAuthenticated, state.isLoading, initialized, getAccessToken, syncUser, setLoading, signOut]);
+  }, [state.isAuthenticated, state.isLoading, initialized, getAccessToken, syncUser, setLoading, signOut, navigate]);
 
   // Optionally we can show a global loading screen if auth is initializing
   if (state.isLoading) return <div className="min-h-screen flex items-center justify-center">Loading Auth...</div>;

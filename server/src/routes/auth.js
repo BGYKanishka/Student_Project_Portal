@@ -1,7 +1,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const validate = require('../middleware/validate');
-const { authenticate, checkJwt } = require('../middleware/auth');
+const { authenticate, checkJwt, attachUser } = require('../middleware/auth');
 const { getMe, syncUser, completeProfile } = require('../controllers/authController');
 
 const router = express.Router();
@@ -13,9 +13,12 @@ router.post('/sync', checkJwt, syncUser);
 router.get('/me', authenticate, getMe);
 
 // Complete profile (set student/recruiter role for new users)
+// Uses checkJwt + attachUser instead of authenticate because new users
+// don't have a DB record yet — that's what this endpoint creates.
 router.post(
   '/complete-profile',
-  authenticate,
+  checkJwt,
+  attachUser,
   [
     body('role').isIn(['student', 'recruiter']).withMessage('Role must be student or recruiter.'),
     body('student_id').optional({ checkFalsy: true }).trim()
