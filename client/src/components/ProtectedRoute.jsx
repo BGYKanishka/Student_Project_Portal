@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 
 export default function ProtectedRoute({ children, roles }) {
-  const { user, loading } = useAuthStore();
+  const { user, loading, requireProfile } = useAuthStore();
   const location = useLocation();
 
   if (loading) {
@@ -13,8 +13,16 @@ export default function ProtectedRoute({ children, roles }) {
     );
   }
 
+  // If they need to complete their profile, only allow them on the complete-profile page
+  if (requireProfile) {
+    if (location.pathname !== '/complete-profile') {
+      return <Navigate to="/complete-profile" replace />;
+    }
+    return children;
+  }
+
   if (!user) {
-    return <Navigate to="/auth/login" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   if (roles && !roles.includes(user.role)) {

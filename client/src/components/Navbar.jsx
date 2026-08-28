@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiMenu, FiX, FiBell, FiUser, FiLogOut, FiGrid, FiChevronDown,
 } from 'react-icons/fi';
+import { useAuthContext } from '@asgardeo/auth-react';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
 
 export default function Navbar() {
-  const { user, logout } = useAuthStore();
+  const { signIn, signOut } = useAuthContext();
+  const { user, clearUser } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -187,7 +189,7 @@ export default function Navbar() {
                         )}
                         <div className="border-t border-gray-50 mt-1 pt-1">
                           <button
-                            onClick={logout}
+                            onClick={() => { clearUser(); signOut(); }}
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
                           >
                             <FiLogOut size={14} /> Sign out
@@ -200,18 +202,18 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link
-                  to="/auth/login"
+                <button
+                  onClick={() => signIn()}
                   className="px-4 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all"
                 >
                   Sign in
-                </Link>
-                <Link
-                  to="/auth/login"
+                </button>
+                <button
+                  onClick={() => signIn()}
                   className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-green-200"
                 >
                   Add Project
-                </Link>
+                </button>
               </>
             )}
           </div>
@@ -278,7 +280,7 @@ export default function Navbar() {
                         )}
                       </Link>
                       <button
-                        onClick={logout}
+                        onClick={() => { clearUser(); signOut(); }}
                         className="w-full text-left px-4 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50"
                       >
                         Sign out
@@ -286,10 +288,10 @@ export default function Navbar() {
                     </>
                   ) : (
                     <>
-                      <Link to="/auth/login" className="block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">Sign in</Link>
-                      <Link to="/auth/login" className="block px-4 py-2.5 rounded-xl text-sm font-semibold bg-green-600 text-white text-center hover:bg-green-700">
+                      <button onClick={() => signIn()} className="w-full text-left block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">Sign in</button>
+                      <button onClick={() => signIn()} className="w-full block px-4 py-2.5 rounded-xl text-sm font-semibold bg-green-600 text-white text-center hover:bg-green-700">
                         Add Your Project
-                      </Link>
+                      </button>
                     </>
                   )}
                 </div>
