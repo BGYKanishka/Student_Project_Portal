@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { FiArrowRight, FiCode, FiUsers, FiBriefcase, FiStar, FiTrendingUp } from 'react-icons/fi';
+import { useAuthContext } from '@asgardeo/auth-react';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import ProjectCard from '../components/ProjectCard';
@@ -45,11 +46,14 @@ export default function LandingPage() {
     { value: 0, suffix: '+', label: 'Connections Made' },
   ]);
 
+  const { signIn } = useAuthContext();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user?.role === 'admin') {
-      navigate('/admin/dashboard', { replace: true });
+    if (user) {
+      if (user.role === 'admin') navigate('/admin/dashboard', { replace: true });
+      else if (user.role === 'student') navigate('/dashboard', { replace: true });
+      else if (user.role === 'recruiter') navigate('/projects', { replace: true });
     }
   }, [user, navigate]);
 
@@ -128,12 +132,12 @@ export default function LandingPage() {
 
             <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4 justify-center">
               {user?.role !== 'recruiter' && (
-                <Link
-                  to="/auth/login"
+                <button
+                  onClick={() => signIn()}
                   className="inline-flex items-center gap-2 px-7 py-3.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-green-200 hover:shadow-green-300 hover:-translate-y-0.5 text-base"
                 >
                   Add Your Project <FiArrowRight size={18} />
-                </Link>
+                </button>
               )}
               <Link
                 to="/projects"
@@ -251,12 +255,21 @@ export default function LandingPage() {
                 ? 'Browse hundreds of innovative projects built by UOK students.'
                 : 'Join hundreds of UOK students who are already building their portfolios and getting discovered.'}
             </p>
-            <Link
-              to={user?.role === 'recruiter' ? '/projects' : '/auth/login'}
-              className="inline-flex items-center gap-2 px-8 py-4 bg-white text-green-700 font-bold rounded-xl hover:bg-green-50 transition-all duration-200 shadow-lg hover:-translate-y-0.5 text-base"
-            >
-              {user?.role === 'recruiter' ? 'Browse Projects' : 'Get Started Free'} <FiArrowRight size={18} />
-            </Link>
+            {user?.role === 'recruiter' ? (
+              <Link
+                to="/projects"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-white text-green-700 font-bold rounded-xl hover:bg-green-50 transition-all duration-200 shadow-lg hover:-translate-y-0.5 text-base"
+              >
+                Browse Projects <FiArrowRight size={18} />
+              </Link>
+            ) : (
+              <button
+                onClick={() => signIn()}
+                className="inline-flex items-center gap-2 px-8 py-4 bg-white text-green-700 font-bold rounded-xl hover:bg-green-50 transition-all duration-200 shadow-lg hover:-translate-y-0.5 text-base"
+              >
+                Get Started Free <FiArrowRight size={18} />
+              </button>
+            )}
           </motion.div>
         </div>
       </section>

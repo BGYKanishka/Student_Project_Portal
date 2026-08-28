@@ -5,34 +5,27 @@ const useAuthStore = create((set) => ({
   user: null,
   loading: true,
   initialized: false,
+  requireProfile: false,
 
-  fetchMe: async () => {
+  syncUser: async () => {
     try {
-      const res = await api.get('/auth/me');
-      set({ user: res.data.user, loading: false, initialized: true });
+      const res = await api.post('/auth/sync');
+      if (res.data.requireProfile) {
+        set({ user: null, requireProfile: true, loading: false, initialized: true });
+        return { requireProfile: true };
+      }
+      set({ user: res.data.user, requireProfile: false, loading: false, initialized: true });
+      return { success: true };
     } catch {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
       set({ user: null, loading: false, initialized: true });
+      return { success: false };
     }
   },
 
-  logout: async () => {
-    try {
-      await api.post('/auth/logout');
-    } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      set({ user: null });
-      window.location.href = '/';
-    }
-  },
-
-  setUser: (user) => set({ user }),
+  setLoading: (loading) => set({ loading }),
+  setUser: (user) => set({ user, requireProfile: false, loading: false, initialized: true }),
   clearUser: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    set({ user: null });
+    set({ user: null, requireProfile: false, initialized: true });
   },
 }));
 

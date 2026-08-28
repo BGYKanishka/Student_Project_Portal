@@ -31,7 +31,7 @@ const setupDb = async () => {
     await run(client, `
       CREATE TABLE IF NOT EXISTS users (
         id             SERIAL        PRIMARY KEY,
-        google_id      VARCHAR(255)  UNIQUE,
+        asgardeo_id    VARCHAR(255)  UNIQUE,
         password       VARCHAR(255),
         name           VARCHAR(255)  NOT NULL,
         email          VARCHAR(255)  UNIQUE NOT NULL,
