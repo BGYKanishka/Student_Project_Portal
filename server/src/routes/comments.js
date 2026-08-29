@@ -20,8 +20,9 @@ const commentValidation = [
   body('is_private').optional().isBoolean().withMessage('is_private must be true or false.'),
 ];
 
-// Anyone (including guests) can read public comments; optionalAuth lets us
-// reveal private comments to the author/admin when a valid session exists.
+// Any authenticated user can comment. The controller handles visibility logic:
+// - Public comments are visible to everyone.
+// - Private comments are visible only to the author, admins, and the project owner.
 router.get('/', param('id').isInt(), validate, optionalAuth, getProjectComments);
 
 // Posting and deleting comments requires login (student, recruiter, or admin)

@@ -5,9 +5,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
+
 const rateLimit = require('express-rate-limit');
 const pool = require('./config/db');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
@@ -20,7 +23,24 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // ── Security ──────────────────────────────────────────────────────────────────
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https://lh3.googleusercontent.com"],
+      connectSrc: ["'self'", "https://api.asgardeo.io"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+}));
 
 app.use(cors({
   origin: process.env.CLIENT_URL,
@@ -51,7 +71,7 @@ app.use('/api/auth/', authLimiter);
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cookieParser());
+
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -85,10 +105,30 @@ app.use((err, req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`\n🚀 UOK Connect server running on http://localhost:${PORT}`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
-  });
+  // ── HTTPS with mkcert certificates ──────────────────────────────────────────
+  const certDir = path.join(__dirname, '../../certs');
+  const certFile = path.join(certDir, 'localhost+2.pem');
+  const keyFile = path.join(certDir, 'localhost+2-key.pem');
+
+  if (fs.existsSync(certFile) && fs.existsSync(keyFile)) {
+    const sslOptions = {
+      key: fs.readFileSync(keyFile),
+      cert: fs.readFileSync(certFile),
+    };
+
+    https.createServer(sslOptions, app).listen(PORT, () => {
+      console.log(`\n🔒 UOK Connect server running on https://localhost:${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+  } else {
+    console.warn('⚠️  SSL certificates not found. Run: cd certs && mkcert localhost 127.0.0.1 ::1');
+    console.warn('   Falling back to HTTP...\n');
+    app.listen(PORT, () => {
+      console.log(`\n🚀 UOK Connect server running on http://localhost:${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+  }
 }
 
 module.exports = app;
+

@@ -2,26 +2,34 @@
 
 🔗 **[Live Demo / Deployed App](https://student-project-portal-mu6m.vercel.app/)**
 
-> An academic project serving as a student portfolio showcase portal for the University of Kelaniya.
+> An academic project serving as a student portfolio showcase portal for the University of Kelaniya, enhanced with strict information security measures.
 
 **UOK Connect** bridges the gap between students and the industry. It allows students to publish their academic and personal projects, while recruiters can easily discover emerging tech talent. 
 
-## 🚀 Tech Stack
+## 🚀 Tech Stack & Security
 
 - **Frontend**: React 18, Vite, Tailwind CSS v4, Zustand (State Management)
-  - *Libraries:* React Hook Form + Zod (Form Validation), Framer Motion (Animations), Axios, React Router v7
-- **Backend**: Node.js, Express 5, Passport.js (Google OAuth 2.0)
-  - *Libraries:* Helmet & express-rate-limit (Security), express-validator, JWT & bcryptjs (Auth), cookie-parser
-- **Database**: PostgreSQL (hosted on Neon), `connect-pg-simple` (Session Store)
+  - *Auth:* `@asgardeo/auth-react` (OIDC)
+  - *Libraries:* React Hook Form + Zod (Form Validation), Framer Motion, Axios, React Router v7
+- **Backend**: Node.js, Express 5
+  - *Auth:* `express-jwt` + `jwks-rsa` (JWKS-based token validation)
+  - *Security:* Helmet (CSP headers), `express-rate-limit`, parameterized queries (SQLi prevention)
+- **Database**: PostgreSQL (hosted on Neon)
 - **File Storage**: Cloudinary (Image CDN), Multer (In-memory uploads)
 - **Deployment**: Vercel (Frontend & Backend)
 
-## ✨ Key Features & Engineering Decisions
+## 🔐 Security & Access Control (Information Security Assessment)
 
-- **Role-Based Access Control**: Tailored workflows and UI/UX for Students, Recruiters, and Admins.
-- **Secure Authentication**: Implemented Single Sign-On (SSO) using Google OAuth 2.0 with session tokens stored in secure, `HTTP-only` cookies to prevent XSS attacks.
-- **Optimized Image Processing**: Utilized Multer for in-memory uploads, streaming buffers directly to Cloudinary without writing to the local disk, improving performance and deployment compatibility.
-- **Asynchronous Event Architecture**: Decoupled core request logic from side-effects (like generating notifications) using Node's native `EventEmitter`, ensuring fast API response times.
+This application has been hardened to mitigate the **OWASP Top 10** vulnerabilities:
+
+- **Authentication (OIDC):** Uses **Asgardeo** as the cloud Identity Provider (IdP). Authentication relies entirely on IdP-issued access tokens.
+- **Zero Self-Minted Tokens:** The backend validates tokens using Asgardeo's JWKS endpoint (asymmetric RS256 cryptography). No `JWT_SECRET` exists in the codebase.
+- **Role & Ownership Access Control:** A strict `requireRole` middleware is used alongside ownership validation (`user_id === req.user.id`) to prevent horizontal and vertical privilege escalation.
+- **CSRF Resistance:** Uses `Authorization: Bearer <token>` headers instead of cookies.
+- **Secure Configuration:** 
+  - All secrets are managed via `.env` (excluded from git). 
+  - Local development enforces **HTTPS** via locally-trusted certificates (`mkcert`).
+  - Strict **Content Security Policy (CSP)** headers are enforced via Helmet.
 
 ## 🏗 System Architecture
 
@@ -33,21 +41,21 @@ graph TD
     %% Frontend Layer
     subgraph Frontend [Client - React / Vite]
         ClientApp[React Components / Pages]
-        StateStore[Zustand State Management]
+        AuthSDK[Asgardeo Auth SDK]
         Axios[Axios API Client]
-        ClientApp <--> StateStore
+        ClientApp <--> AuthSDK
         ClientApp <--> Axios
     end
 
     %% Backend Layer
     subgraph Backend [Server - Node.js / Express]
         Router(Express Router)
-        AuthMiddleware[Passport.js / Auth Middleware]
+        JWKSMiddleware[JWKS Token Validation]
         UploadMiddleware[Multer Memory Storage]
         Controllers[API Controllers]
         EventEmitter[Node EventEmitter]
         
-        Router --> AuthMiddleware
+        Router --> JWKSMiddleware
         Router --> UploadMiddleware
         Router --> Controllers
         Controllers -.->|Emits async events| EventEmitter
@@ -55,33 +63,26 @@ graph TD
 
     %% External Services
     subgraph External [External Services]
-        Google[Google OAuth 2.0 API]
+        Asgardeo[Asgardeo OIDC / IdP]
         Cloudinary[Cloudinary Storage / CDN]
     end
 
     %% Database Layer
     subgraph DB [Database Layer]
         Postgres[(PostgreSQL)]
-        SessionStore[(connect-pg-simple Session Store)]
     end
 
     %% Connections across layers
-    Axios <-->|REST API JSON \n HTTP/Cookies| Router
+    AuthSDK <-->|Auth Code Flow / PKCE| Asgardeo
+    Axios <-->|REST API + Bearer Token \n HTTPS| Router
+    JWKSMiddleware -->|Fetch Public Keys| Asgardeo
     
-    AuthMiddleware <-->|OAuth Flow| Google
-    AuthMiddleware <-->|Manage Sessions| SessionStore
-    AuthMiddleware <-->|Verify/Create Users| Postgres
-
     UploadMiddleware -->|Passes req.file.buffer| Controllers
     Controllers -->|Pipes Image Buffer| Cloudinary
     Cloudinary -.->|Returns Secure Image URL| Controllers
 
-    Controllers <-->|CRUD Operations| Postgres
+    Controllers <-->|CRUD Operations / Parameterized Queries| Postgres
     EventEmitter -->|Async writes notifications| Postgres
-    
-    %% Force External Services to be on the same level as Database Layer
-    EventEmitter ~~~ Google
-    EventEmitter ~~~ Cloudinary
     
     %% Styling
     classDef frontend fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px,color:#000000;
@@ -89,26 +90,43 @@ graph TD
     classDef database fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000000;
     classDef external fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000000;
     
-    class ClientApp,StateStore,Axios frontend;
-    class Router,AuthMiddleware,UploadMiddleware,Controllers,EventEmitter backend;
-    class Postgres,SessionStore database;
-    class Google,Cloudinary external;
+    class ClientApp,AuthSDK,Axios frontend;
+    class Router,JWKSMiddleware,UploadMiddleware,Controllers,EventEmitter backend;
+    class Postgres database;
+    class Asgardeo,Cloudinary external;
 ```
 
-## 💻 Local Setup
+## 💻 Local Setup (HTTPS Required)
 
-### 1. Environment Configuration
-Create `.env` files in both the `client/` and `server/` directories using the provided templates.
-- **Server (`server/.env`)**: Requires your Neon PostgreSQL URL, Google OAuth credentials, and Cloudinary API keys.
-- **Client (`client/.env`)**: Set `VITE_API_URL=http://localhost:5001`.
+To meet security requirements, the local development server runs over HTTPS.
 
-### 2. Start the Application
+### 1. Generate SSL Certificates
+Install `mkcert` and generate local certificates in the root directory:
+```bash
+# MacOS (Homebrew)
+brew install mkcert
+mkcert -install
+
+# Generate certs inside a certs/ folder
+mkdir certs && cd certs
+mkcert localhost 127.0.0.1 ::1
+cd ..
+```
+
+### 2. Environment Configuration
+Create `.env` files in both the `client/` and `server/` directories using the provided templates (`.env.example`).
+**Note:** Ensure you do not commit real credentials.
+- **Server (`server/.env`)**: Requires your PostgreSQL URL, Asgardeo Base URL/Client ID, and Cloudinary keys. Set `CLIENT_URL=https://localhost:5173`.
+- **Client (`client/.env`)**: Set `VITE_ASGARDEO_CLIENT_ID` and `VITE_ASGARDEO_BASE_URL`.
+
+### 3. Database Initialization
+A database creation script is included to set up all tables automatically.
 
 **Run the Backend (Port 5001):**
 ```bash
 cd server
 npm install
-npm run db:setup  # Initializes the Neon PostgreSQL tables
+npm run db:setup  # Creates tables in your PostgreSQL database
 npm run dev
 ```
 
