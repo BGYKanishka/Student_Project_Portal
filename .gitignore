@@ -56,4 +56,7 @@ uploads/
 *.tmp
 *.temp
 
+# SSL certificates (generated locally via mkcert)
+certs/
+
 *package-lock.json
