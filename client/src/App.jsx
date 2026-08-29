@@ -56,6 +56,21 @@ function AuthSync({ children }) {
     sync();
   }, [state.isAuthenticated, state.isLoading, initialized, getAccessToken, syncUser, setLoading, signOut, navigate]);
 
+  useEffect(() => {
+    const handleForbidden = (e) => {
+      // Clear the local state so the app knows the user is logged out immediately
+      useAuthStore.getState().clearUser();
+      // Sign out from Asgardeo
+      signOut();
+      
+      const message = e.detail?.message || 'Your session was terminated or your account is suspended.';
+      // We could use toast.error(message) here if toast is imported, but it might disappear during redirect.
+    };
+
+    window.addEventListener('auth:forbidden', handleForbidden);
+    return () => window.removeEventListener('auth:forbidden', handleForbidden);
+  }, [signOut]);
+
   // Show a global loading screen while auth is initializing or syncing
   if (state.isLoading || loading) {
     return (
