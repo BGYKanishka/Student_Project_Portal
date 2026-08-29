@@ -28,4 +28,16 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Response interceptor to handle 403 Forbidden errors globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 403) {
+      // Dispatch a custom event to notify the application
+      window.dispatchEvent(new CustomEvent('auth:forbidden', { detail: error.response.data }));
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;

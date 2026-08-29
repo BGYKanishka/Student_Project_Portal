@@ -32,7 +32,7 @@ import AdminNotifications from './pages/admin/AdminNotifications';
 /* ── AuthSync Wrapper ────────────────────────────────────────── */
 function AuthSync({ children }) {
   const { state, getAccessToken, signIn, signOut } = useAuthContext();
-  const { syncUser, initialized, setLoading } = useAuthStore();
+  const { syncUser, initialized, setLoading, loading } = useAuthStore();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,8 +56,32 @@ function AuthSync({ children }) {
     sync();
   }, [state.isAuthenticated, state.isLoading, initialized, getAccessToken, syncUser, setLoading, signOut, navigate]);
 
-  // Optionally we can show a global loading screen if auth is initializing
-  if (state.isLoading) return <div className="min-h-screen flex items-center justify-center">Loading Auth...</div>;
+  useEffect(() => {
+    const handleForbidden = (e) => {
+      // Clear the local state so the app knows the user is logged out immediately
+      useAuthStore.getState().clearUser();
+      // Sign out from Asgardeo
+      signOut();
+      
+      const message = e.detail?.message || 'Your session was terminated or your account is suspended.';
+      // We could use toast.error(message) here if toast is imported, but it might disappear during redirect.
+    };
+
+    window.addEventListener('auth:forbidden', handleForbidden);
+    return () => window.removeEventListener('auth:forbidden', handleForbidden);
+  }, [signOut]);
+
+  // Show a global loading screen while auth is initializing or syncing
+  if (state.isLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center">
+          <div className="w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-500 font-medium">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
 
   return children;
 }
