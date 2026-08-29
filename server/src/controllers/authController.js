@@ -33,12 +33,17 @@ const syncUser = async (req, res) => {
       result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
       
       if (result.rows.length > 0) {
+        const user = result.rows[0];
+
+        if (user.is_blocked) {
+          return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
+        }
+
         // Link existing account to Asgardeo
         await pool.query(
           'UPDATE users SET asgardeo_id = $1, profile_pic = COALESCE(profile_pic, $2), updated_at = NOW() WHERE email = $3',
           [asgardeoId, profilePic, email]
         );
-        const user = result.rows[0];
         
         // If it's an admin, just return them
         if (user.role === 'admin') {
