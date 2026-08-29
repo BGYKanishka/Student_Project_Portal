@@ -23,7 +23,24 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // ── Security ──────────────────────────────────────────────────────────────────
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https://lh3.googleusercontent.com"],
+      connectSrc: ["'self'", "https://api.asgardeo.io"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+}));
 
 app.use(cors({
   origin: process.env.CLIENT_URL,
