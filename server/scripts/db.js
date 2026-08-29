@@ -2,7 +2,7 @@ require('node:dns').setDefaultResultOrder('ipv4first');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { Pool } = require('pg');
 const readline = require('readline');
-const bcrypt = require('bcryptjs');
+
 
 const poolConfig = process.env.DATABASE_URL 
   ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } }
@@ -24,7 +24,7 @@ const setupDb = async () => {
     await client.query('BEGIN');
     // Drop existing tables to apply schema changes cleanly
     await run(client, `
-      DROP TABLE IF EXISTS comments, notifications, likes, followers, project_tags, project_views, refresh_tokens, projects, users, "session" CASCADE;
+      DROP TABLE IF EXISTS comments, notifications, likes, followers, project_tags, project_views, projects, users CASCADE;
     `);
 
     // ── USERS ───────────────────────────────────────────────────────────────
@@ -32,18 +32,13 @@ const setupDb = async () => {
       CREATE TABLE IF NOT EXISTS users (
         id             SERIAL        PRIMARY KEY,
         asgardeo_id    VARCHAR(255)  UNIQUE,
-        password       VARCHAR(255),
         name           VARCHAR(255)  NOT NULL,
         email          VARCHAR(255)  UNIQUE NOT NULL,
         profile_pic    VARCHAR(500),
         role           VARCHAR(20)   NOT NULL DEFAULT 'student'
                          CHECK (role IN ('student', 'recruiter', 'admin')),
         student_id     VARCHAR(50)   UNIQUE,
-        admin_verified BOOLEAN       NOT NULL DEFAULT FALSE,
         is_blocked     BOOLEAN       NOT NULL DEFAULT FALSE,
-        is_email_verified BOOLEAN    NOT NULL DEFAULT FALSE,
-        verification_token VARCHAR(64),
-        verification_token_expires_at TIMESTAMP,
         created_at     TIMESTAMP     NOT NULL DEFAULT NOW(),
         updated_at     TIMESTAMP     NOT NULL DEFAULT NOW()
       );
@@ -131,18 +126,7 @@ const setupDb = async () => {
       );
     `);
 
-    // ── SESSION ───────────────────────────────────────────────────────────────
-    await run(client, `
-      CREATE TABLE IF NOT EXISTS "session" (
-        "sid"    VARCHAR      NOT NULL COLLATE "default",
-        "sess"   JSON         NOT NULL,
-        "expire" TIMESTAMP(6) NOT NULL,
-        PRIMARY KEY ("sid")
-      );
-    `);
-    await run(client, `
-      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
-    `);
+
 
     // ── PROJECT VIEWS ────────────────────────────────────────────────────────
     await run(client, `
@@ -155,16 +139,7 @@ const setupDb = async () => {
       );
     `);
 
-    // ── REFRESH TOKENS ───────────────────────────────────────────────────────
-    await run(client, `
-      CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token TEXT NOT NULL UNIQUE,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
-      );
-    `);
+
 
     // ── INDEXES ───────────────────────────────────────────────────────────────
     await run(client, `
@@ -244,10 +219,8 @@ const resetDb = async (force) => {
         followers,
         project_tags,
         project_views,
-        refresh_tokens,
         projects,
-        users,
-        "session"
+        users
       RESTART IDENTITY
       CASCADE;
     `);
@@ -263,25 +236,19 @@ const resetDb = async (force) => {
   }
 };
 
-const createAdmin = async (email, rawPassword) => {
+const createAdmin = async (email) => {
   const query = `
-    INSERT INTO users (name, email, role, admin_verified, is_email_verified, password) 
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO users (name, email, role) 
+    VALUES ($1, $2, $3)
     ON CONFLICT (email) DO UPDATE 
-    SET password = EXCLUDED.password, 
-        role = EXCLUDED.role, 
-        admin_verified = EXCLUDED.admin_verified,
-        is_email_verified = EXCLUDED.is_email_verified,
+    SET role = EXCLUDED.role, 
         name = EXCLUDED.name;
   `;
 
   try {
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(rawPassword, salt);
-    
-    await pool.query(query, ['Admin User', email, 'admin', true, true, hashedPassword]);
+    await pool.query(query, ['Admin User', email, 'admin']);
     console.log(`Admin user '${email}' inserted/updated successfully!`);
-    console.log(`You can now login locally using:\n   Email: ${email}\n   Password: ${rawPassword}`);
+    console.log(`You can now login using Asgardeo with: ${email}`);
   } catch (err) {
     console.error('Error executing query:', err);
   }
@@ -296,12 +263,11 @@ const createAdmin = async (email, rawPassword) => {
     await resetDb(process.argv.includes('--force'));
   } else if (action === 'create-admin') {
     const email = process.argv[3] || process.env.ADMIN_EMAIL;
-    const password = process.argv[4] || process.env.ADMIN_PASSWORD;
-    if (!email || !password) {
-      console.error('Usage: node scripts/db.js create-admin <email> <password>');
+    if (!email) {
+      console.error('Usage: node scripts/db.js create-admin <email>');
       process.exit(1);
     }
-    await createAdmin(email, password);
+    await createAdmin(email);
   } else {
     console.error('Usage: node scripts/db.js [setup|reset|create-admin]');
     process.exit(1);

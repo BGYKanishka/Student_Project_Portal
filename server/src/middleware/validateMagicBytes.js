@@ -1,10 +1,9 @@
-const FileType = require('file-type');
-
 const validateMagicBytes = async (req, res, next) => {
   if (!req.file) return next();
 
   try {
-    const type = await FileType.fromBuffer(req.file.buffer);
+    const { fileTypeFromBuffer } = await import('file-type');
+    const type = await fileTypeFromBuffer(req.file.buffer);
     if (!type || !type.mime.startsWith('image/')) {
       return res.status(400).json({ 
         success: false, 
