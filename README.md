@@ -41,23 +41,34 @@ graph TD
     %% Frontend Layer
     subgraph Frontend [Client - React / Vite]
         ClientApp[React Components / Pages]
+        ZustandStore[Zustand State Management]
         AuthSDK[Asgardeo Auth SDK]
         Axios[Axios API Client]
+        
+        ClientApp <--> ZustandStore
         ClientApp <--> AuthSDK
         ClientApp <--> Axios
     end
 
     %% Backend Layer
     subgraph Backend [Server - Node.js / Express]
+        SecurityMiddleware[Helmet & Rate Limit]
         Router(Express Router)
         JWKSMiddleware[JWKS Token Validation]
         UploadMiddleware[Multer Memory Storage]
+        ValidationMiddleware[Magic Bytes & Express Validator]
         Controllers[API Controllers]
         EventEmitter[Node EventEmitter]
         
+        SecurityMiddleware --> Router
         Router --> JWKSMiddleware
         Router --> UploadMiddleware
-        Router --> Controllers
+        Router --> ValidationMiddleware
+        
+        JWKSMiddleware --> Controllers
+        UploadMiddleware --> ValidationMiddleware
+        ValidationMiddleware --> Controllers
+        
         Controllers -.->|Emits async events| EventEmitter
     end
 
@@ -74,10 +85,10 @@ graph TD
 
     %% Connections across layers
     AuthSDK <-->|Auth Code Flow / PKCE| Asgardeo
-    Axios <-->|REST API + Bearer Token \n HTTPS| Router
+    Axios <-->|REST API + Bearer Token \n HTTPS| SecurityMiddleware
     JWKSMiddleware -->|Fetch Public Keys| Asgardeo
     
-    UploadMiddleware -->|Passes req.file.buffer| Controllers
+    ValidationMiddleware -->|Passes validated req| Controllers
     Controllers -->|Pipes Image Buffer| Cloudinary
     Cloudinary -.->|Returns Secure Image URL| Controllers
 
@@ -90,8 +101,8 @@ graph TD
     classDef database fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000000;
     classDef external fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000000;
     
-    class ClientApp,AuthSDK,Axios frontend;
-    class Router,JWKSMiddleware,UploadMiddleware,Controllers,EventEmitter backend;
+    class ClientApp,ZustandStore,AuthSDK,Axios frontend;
+    class SecurityMiddleware,Router,JWKSMiddleware,UploadMiddleware,ValidationMiddleware,Controllers,EventEmitter backend;
     class Postgres database;
     class Asgardeo,Cloudinary external;
 ```

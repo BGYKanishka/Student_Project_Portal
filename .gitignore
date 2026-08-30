@@ -60,3 +60,5 @@ uploads/
 certs/
 
 *package-lock.json
+.vercel
+.env*

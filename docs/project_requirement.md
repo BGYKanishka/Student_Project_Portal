@@ -7,7 +7,7 @@ The Faculty of Computing requires a web application where students can showcase 
 The system should support three types of users:
 
 - **Students**
-  - Login using Google OAuth
+  - Login using Asgardeo
   - Create, edit, and delete project posts
   - Upload a project thumbnail/image
   - View projects created by other students
@@ -25,9 +25,9 @@ The system should support three types of users:
 
 # Functional Requirements
 
-## 1. Authentication (Google OAuth)
+## 1. Authentication (Asgardeo)
 
-Users must authenticate using **Google OAuth**.
+Users must authenticate using **Asgardeo**.
 
 ### Required User Information
 - Name
@@ -109,7 +109,10 @@ Suggested database tables:
 
 - users
 - projects
+- project_tags
+- project_views
 - likes
+- comments
 - followers
 - notifications
 
@@ -129,7 +132,7 @@ Use one of the following:
 The frontend must demonstrate:
 
 - API Calls
-- Google Authentication Flow
+- Asgardeo Authentication Flow
 - Form Validation
 - State Management
 
@@ -193,7 +196,7 @@ The backend must demonstrate:
 ## Backend
 - Node.js
 - Express.js
-- Google OAuth (Passport.js)
+- Asgardeo OAuth
 - EventEmitter
 - JWT Authentication
 
