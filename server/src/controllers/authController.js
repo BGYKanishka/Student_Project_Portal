@@ -146,6 +146,21 @@ const handleCallback = async (req, res) => {
         return redirectToError(res, 'No account found. Please sign in as a student or recruiter first.');
       }
 
+      // The earlier SELECT only matches an *unlinked* row by email — a row
+      // whose email matches but already has a *different* oidc_sub linked
+      // (e.g. the same person previously completed registration under a
+      // different Asgardeo identity, or a leftover partial-registration
+      // artifact from Asgardeo's own account store) falls through to here
+      // and would otherwise hit the DB's unique constraint on email as a
+      // raw, unhandled exception. Check for that explicitly first.
+      const emailTaken = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (emailTaken.rows.length) {
+        return redirectToError(
+          res,
+          'An account with this email already exists under a different identity. Please sign in instead, or contact an admin if you believe this is an error.'
+        );
+      }
+
       const role = state === 'student' ? 'student' : 'recruiter';
       // preferredUsername may itself be an email (this Asgardeo org uses
       // email-as-username for self-registered accounts) — slugify by its
