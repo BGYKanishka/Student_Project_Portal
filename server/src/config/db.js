@@ -18,9 +18,14 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
+// Do NOT process.exit() here: an idle client erroring (e.g. a transient
+// connection drop) is expected and recoverable — the pool automatically
+// discards the bad client and opens a fresh one on the next query. Crashing
+// the whole server on every idle-connection blip took the app down
+// mid-session during testing (a local Postgres connection idling past
+// idleTimeoutMillis is enough to trigger this).
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('Unexpected error on idle client:', err.message);
 });
 
 module.exports = pool;

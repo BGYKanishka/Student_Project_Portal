@@ -3,6 +3,7 @@ const { body, param } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate, requireRole, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { verifyImageMagicBytes } = upload;
 const {
   getAllProjects,
   getProject,
@@ -22,6 +23,16 @@ const projectValidation = [
   body('demo_url').optional({ checkFalsy: true }).isURL().withMessage('Invalid demo URL.'),
 ];
 
+// updateProject supports partial updates (unset fields keep their existing
+// value via COALESCE), so title/description are optional here — but must
+// not be blank if the caller does send them.
+const projectUpdateValidation = [
+  body('title').optional().trim().notEmpty().withMessage('Title cannot be empty.').isLength({ max: 255 }),
+  body('description').optional().trim().notEmpty().withMessage('Description cannot be empty.'),
+  body('github_url').optional({ checkFalsy: true }).isURL().withMessage('Invalid GitHub URL.'),
+  body('demo_url').optional({ checkFalsy: true }).isURL().withMessage('Invalid demo URL.'),
+];
+
 // Public — companies can browse without login
 router.get('/', optionalAuth, getAllProjects);
 router.get('/:id', param('id').isInt(), validate, optionalAuth, getProject);
@@ -31,6 +42,7 @@ router.post('/',
   authenticate,
   requireRole('student'),
   upload.single('thumbnail'),
+  verifyImageMagicBytes,
   projectValidation,
   validate,
   createProject
@@ -40,6 +52,9 @@ router.put('/:id',
   authenticate,
   requireRole('student', 'admin'),
   upload.single('thumbnail'),
+  verifyImageMagicBytes,
+  param('id').isInt(),
+  projectUpdateValidation,
   validate,
   updateProject
 );

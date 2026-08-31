@@ -6,7 +6,8 @@ const getUserProfile = async (req, res) => {
     const { id } = req.params;
     const currentUserId = req.user ? req.user.id : null;
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.profile_pic, u.role, u.student_id, u.created_at,
+      `SELECT u.id, u.username, u.name, u.email, u.profile_pic, u.role, u.student_id,
+              u.contact_number, u.organization, u.created_at,
               COUNT(DISTINCT p.id)::int AS project_count,
               COUNT(DISTINCT f.follower_id)::int AS follower_count,
               EXISTS(SELECT 1 FROM followers f2 WHERE f2.follower_id = $2 AND f2.following_id = u.id) AS is_following
@@ -27,6 +28,7 @@ const getUserProfile = async (req, res) => {
     
     if (!isOwnerOrAdmin) {
       delete userProfile.email;
+      delete userProfile.contact_number;
     }
 
     res.json({ success: true, user: userProfile });
@@ -161,13 +163,19 @@ const getFollowing = async (req, res) => {
   }
 };
 
+const CONTACT_NUMBER_RE = /^[0-9+\-()\s]{7,20}$/;
+
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, student_id } = req.body;
+    const { name, student_id, contact_number, organization } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Name is required.' });
+    }
+
+    if (contact_number && !CONTACT_NUMBER_RE.test(contact_number)) {
+      return res.status(400).json({ success: false, message: 'Invalid contact number format.' });
     }
 
     // Fetch user to check role
@@ -185,13 +193,14 @@ const updateProfile = async (req, res) => {
     }
 
     const finalStudentId = userRole === 'student' ? (student_id || null) : null;
+    const finalOrganization = userRole === 'recruiter' ? (organization?.trim() || null) : null;
 
     const result = await pool.query(
-      `UPDATE users 
-       SET name = $1, student_id = $2
-       WHERE id = $3
-       RETURNING id, name, email, profile_pic, role, student_id, created_at`,
-      [name.trim(), finalStudentId, userId]
+      `UPDATE users
+       SET name = $1, student_id = $2, contact_number = $3, organization = $4
+       WHERE id = $5
+       RETURNING id, username, name, email, profile_pic, role, student_id, contact_number, organization, created_at`,
+      [name.trim(), finalStudentId, contact_number?.trim() || null, finalOrganization, userId]
     );
 
     res.json({ success: true, message: 'Profile updated successfully.', user: result.rows[0] });

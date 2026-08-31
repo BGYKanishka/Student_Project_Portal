@@ -28,17 +28,17 @@ const createTables = async () => {
     await run(client, `
       CREATE TABLE IF NOT EXISTS users (
         id             SERIAL        PRIMARY KEY,
-        google_id      VARCHAR(255)  UNIQUE,
-        password       VARCHAR(255),
+        oidc_sub       VARCHAR(255)  UNIQUE,
+        username       VARCHAR(100)  UNIQUE,
         name           VARCHAR(255)  NOT NULL,
         email          VARCHAR(255)  UNIQUE NOT NULL,
         profile_pic    VARCHAR(500),
         role           VARCHAR(20)   NOT NULL DEFAULT 'student'
                          CHECK (role IN ('student', 'recruiter', 'admin')),
         student_id     VARCHAR(50)   UNIQUE,
-        admin_verified BOOLEAN       NOT NULL DEFAULT FALSE,
+        contact_number VARCHAR(30),
+        organization   VARCHAR(255),
         is_blocked     BOOLEAN       NOT NULL DEFAULT FALSE,
-        is_email_verified BOOLEAN    NOT NULL DEFAULT FALSE,
         created_at     TIMESTAMP     NOT NULL DEFAULT NOW(),
         updated_at     TIMESTAMP     NOT NULL DEFAULT NOW()
       );

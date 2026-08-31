@@ -7,13 +7,16 @@ erDiagram
 
     users {
         SERIAL      id             PK
-        VARCHAR255  google_id      UK  "NOT NULL"
+        VARCHAR255  oidc_sub       UK  "nullable until first Asgardeo login"
+        VARCHAR100  username       UK  "from preferred_username claim, or derived"
         VARCHAR255  name               "NOT NULL"
         VARCHAR255  email          UK  "NOT NULL"
         VARCHAR500  profile_pic
         VARCHAR20   role               "NOT NULL | CHECK: student|recruiter|admin | DEFAULT: student"
         VARCHAR50   student_id     UK  "nullable — students only"
-        BOOLEAN     admin_verified     "NOT NULL | DEFAULT: false"
+        VARCHAR30   contact_number     "nullable"
+        VARCHAR255  organization       "nullable — recruiters only"
+        BOOLEAN     is_blocked         "NOT NULL | DEFAULT: false"
         TIMESTAMP   created_at         "NOT NULL | DEFAULT: NOW()"
         TIMESTAMP   updated_at         "NOT NULL | DEFAULT: NOW() | auto-updated by trigger"
     }
@@ -90,8 +93,11 @@ erDiagram
 | Column | Notes |
 |--------|-------|
 | `role` | `'student'` can add/edit/delete projects · `'recruiter'` can like/follow · `'admin'` has full moderation access |
-| `student_id` | Set after OAuth by the student on the `/complete-profile` page; stored in `sessionStorage` during the OAuth redirect and auto-submitted on return |
-| `admin_verified` | Set to `TRUE` when an admin account is created via the secret-key flow |
+| `oidc_sub` | The `sub` claim from the Asgardeo access/ID token — the authoritative link between a row and the IdP-authenticated identity. `NULL` until first login; pre-provisioned admin rows (`scripts/create_admin.js`) start `NULL` and get linked on that email's first `role=admin` login. |
+| `username` | Prefers Asgardeo's `preferred_username` claim (if the app is configured to release it); otherwise derived from the email local-part with a numeric suffix on collision. |
+| `student_id` | Set by the student on the `/complete-profile` page after their first Asgardeo login |
+| `organization` | Set by the recruiter on `/complete-profile` after their first Asgardeo login |
+| `contact_number` | Optional for both roles, set via `/complete-profile` or the profile edit form |
 
 ### `projects`
 | Column | Notes |
@@ -120,8 +126,8 @@ Created **only** through the event system (`EventEmitter`), never directly from 
 
 ### `session`
 Managed entirely by `connect-pg-simple` / `express-session`.  
-Used only for the short OAuth flow state (10-minute TTL).  
-**Not** used for user authentication — that is handled by a JWT in an HTTP-only cookie.  
+Used only for short-lived OIDC authorization-flow state — the PKCE code verifier, `state`, `nonce`, and requested role (10-minute TTL).  
+**Not** used for user authentication — every authenticated request is verified directly against the Asgardeo-issued access token cookie (see `server/src/middleware/auth.js`).  
 Has no FK to `users` by design.
 
 ---

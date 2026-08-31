@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiBookOpen, FiCheckCircle } from 'react-icons/fi';
@@ -9,70 +9,52 @@ import useAuthStore from '../store/authStore';
 export default function CompleteProfilePage() {
   const { fetchMe, user } = useAuthStore();
   const navigate = useNavigate();
+  const isRecruiter = user?.role === 'recruiter';
+
   const [studentId, setStudentId] = useState('');
-  const [error, setError] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [autoSubmitting, setAutoSubmitting] = useState(false);
 
-  // Pick up the student ID stored before the OAuth redirect
-  useEffect(() => {
-    const pending = sessionStorage.getItem('pending_student_id');
-    if (pending) {
-      setStudentId(pending);
-      // Auto-submit immediately — the user already entered their ID on the login page
-      setAutoSubmitting(true);
-      submitStudentId(pending);
+  const validate = () => {
+    const next = {};
+    if (!isRecruiter && !studentId.trim()) {
+      next.studentId = 'Student ID is required';
+    } else if (!isRecruiter && !/^[A-Za-z0-9/\-]{3,20}$/.test(studentId.trim())) {
+      next.studentId = 'Invalid format (e.g. 2020/CS/001)';
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const validate = (val) => {
-    if (!val.trim()) return 'Student ID is required';
-    if (!/^[A-Za-z0-9/\-]{3,20}$/.test(val.trim())) return 'Invalid format (e.g. 2020/CS/001)';
-    return '';
+    if (isRecruiter && !organization.trim()) {
+      next.organization = 'Organization / business name is required';
+    }
+    if (contactNumber.trim() && !/^[0-9+\-()\s]{7,20}$/.test(contactNumber.trim())) {
+      next.contactNumber = 'Invalid contact number format';
+    }
+    return next;
   };
 
-  const submitStudentId = async (id) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const nextErrors = validate();
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
     setSubmitting(true);
     try {
-      await api.post('/auth/complete-profile', { student_id: id });
-      sessionStorage.removeItem('pending_student_id');
+      await api.post('/auth/complete-profile', {
+        student_id: isRecruiter ? undefined : studentId.trim().toUpperCase(),
+        organization: isRecruiter ? organization.trim() : undefined,
+        contact_number: contactNumber.trim() || undefined,
+      });
       toast.success('Profile set up successfully!');
       await fetchMe();
-      navigate('/dashboard');
+      navigate(isRecruiter ? '/projects' : '/dashboard');
     } catch (err) {
-      sessionStorage.removeItem('pending_student_id');
-      setAutoSubmitting(false);
       toast.error(err.response?.data?.message || 'Something went wrong.');
-      setError(err.response?.data?.message || 'Could not save student ID.');
     } finally {
       setSubmitting(false);
     }
   };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const err = validate(studentId);
-    if (err) { setError(err); return; }
-    setError('');
-    submitStudentId(studentId.trim().toUpperCase());
-  };
-
-  if (autoSubmitting && submitting) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <div className="w-12 h-12 border-2 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Setting up your profile…</p>
-          <p className="text-gray-400 text-sm mt-1">Linking your student ID</p>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 bg-gray-50">
@@ -92,45 +74,64 @@ export default function CompleteProfilePage() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">One last step</h1>
           <p className="text-gray-500 text-sm mt-2 leading-relaxed">
-            Enter your university student ID to complete your profile.
-            It will be visible on your public page.
+            {isRecruiter
+              ? 'Tell us a bit about your organization to complete your profile.'
+              : 'Enter your university student ID to complete your profile.'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!isRecruiter && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Student ID</label>
+              <input
+                type="text"
+                value={studentId}
+                onChange={(e) => { setStudentId(e.target.value); if (errors.studentId) setErrors((p) => ({ ...p, studentId: '' })); }}
+                placeholder="e.g. 2020/CS/001"
+                autoFocus
+                className={`w-full px-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-shadow ${
+                  errors.studentId ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:ring-green-200 focus:border-green-400'
+                }`}
+              />
+              {errors.studentId && <p className="mt-1.5 text-xs text-red-600">{errors.studentId}</p>}
+            </div>
+          )}
+
+          {isRecruiter && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Organization / Business Name</label>
+              <input
+                type="text"
+                value={organization}
+                onChange={(e) => { setOrganization(e.target.value); if (errors.organization) setErrors((p) => ({ ...p, organization: '' })); }}
+                placeholder="e.g. Acme Corp"
+                autoFocus
+                className={`w-full px-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-shadow ${
+                  errors.organization ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:ring-green-200 focus:border-green-400'
+                }`}
+              />
+              {errors.organization && <p className="mt-1.5 text-xs text-red-600">{errors.organization}</p>}
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Student ID
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Contact Number <span className="text-gray-400 font-normal">(optional)</span></label>
             <input
-              type="text"
-              value={studentId}
-              onChange={(e) => {
-                setStudentId(e.target.value);
-                if (error) setError('');
-              }}
-              placeholder="e.g. 2020/CS/001"
-              autoFocus
+              type="tel"
+              value={contactNumber}
+              onChange={(e) => { setContactNumber(e.target.value); if (errors.contactNumber) setErrors((p) => ({ ...p, contactNumber: '' })); }}
+              placeholder="e.g. +94 71 234 5678"
               className={`w-full px-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-shadow ${
-                error
-                  ? 'border-red-300 bg-red-50 focus:ring-red-200'
-                  : 'border-gray-200 focus:ring-green-200 focus:border-green-400'
+                errors.contactNumber ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:ring-green-200 focus:border-green-400'
               }`}
             />
-            {error && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-1.5 text-xs text-red-600"
-              >
-                {error}
-              </motion.p>
-            )}
+            {errors.contactNumber && <p className="mt-1.5 text-xs text-red-600">{errors.contactNumber}</p>}
           </div>
 
           <button
             type="submit"
-            disabled={submitting || !studentId.trim()}
+            disabled={submitting}
             className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-200 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all text-sm"
           >
             {submitting ? (

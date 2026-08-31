@@ -52,6 +52,9 @@ coverage/
 uploads/
 **/uploads/
 
+# Local TLS certs (self-signed, dev-only — never commit private keys)
+certs/
+
 # Temporary files
 *.tmp
 *.temp

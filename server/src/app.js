@@ -9,8 +9,9 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const rateLimit = require('express-rate-limit');
-const passport = require('./config/passport');
 const pool = require('./config/db');
+const httpsRedirect = require('./middleware/httpsRedirect');
+const { verifyCsrf } = require('./middleware/csrf');
 
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
@@ -22,7 +23,12 @@ const publicRoutes = require('./routes/public');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Needed so req.headers['x-forwarded-proto'] etc. are trusted behind
+// Vercel's/any reverse proxy's edge.
+app.set('trust proxy', 1);
+
 // ── Security ──────────────────────────────────────────────────────────────────
+app.use(httpsRedirect);
 app.use(helmet({ crossOriginEmbedderPolicy: false }));
 
 app.use(cors({
@@ -65,11 +71,11 @@ app.use(session({
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production' || process.env.VERCEL === '1',
     sameSite: (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') ? 'none' : 'lax',
-    maxAge: 10 * 60 * 1000, // 10 minutes — used only during OAuth flow
+    maxAge: 10 * 60 * 1000, // 10 minutes — used only during the OIDC redirect flow
   },
 }));
 
-app.use(passport.initialize());
+app.use('/api/', verifyCsrf);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -99,10 +105,26 @@ app.use((err, req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`\n🚀 UOK Connect server running on http://localhost:${PORT}`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
-  });
+  // Opt-in local HTTPS: set HTTPS_CERT_PATH/HTTPS_KEY_PATH to a cert/key
+  // pair (see certs/cert.pem, certs/key.pem — generate with openssl, see
+  // README) to serve this dev server over TLS instead of plain HTTP.
+  if (process.env.HTTPS_CERT_PATH && process.env.HTTPS_KEY_PATH) {
+    const https = require('https');
+    const fs = require('fs');
+    const options = {
+      cert: fs.readFileSync(process.env.HTTPS_CERT_PATH),
+      key: fs.readFileSync(process.env.HTTPS_KEY_PATH),
+    };
+    https.createServer(options, app).listen(PORT, () => {
+      console.log(`\n🔒 UOK Connect server running on https://localhost:${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+  } else {
+    app.listen(PORT, () => {
+      console.log(`\n🚀 UOK Connect server running on http://localhost:${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+  }
 }
 
 module.exports = app;

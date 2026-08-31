@@ -6,6 +6,23 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// The CSRF token lives only in memory on this module — it arrives in the
+// JSON body of /auth/me and /auth/refresh (never as a cookie, since the
+// client and server are on different origins and JS on this page cannot
+// read a cookie set by the server's origin anyway). CORS ensures only this
+// app's own JS can ever read that response body.
+let csrfToken = null;
+export const setCsrfToken = (token) => {
+  csrfToken = token;
+};
+
+api.interceptors.request.use((config) => {
+  if (csrfToken) {
+    config.headers['X-CSRF-Token'] = csrfToken;
+  }
+  return config;
+});
+
 // Holds the in-flight refresh request (if any) so concurrent 401s share
 // the same refresh call instead of racing each other. Using a shared
 // promise (rather than a boolean flag + queue) avoids the race where two
@@ -16,6 +33,10 @@ const refreshAccessToken = () => {
   if (!refreshPromise) {
     refreshPromise = api
       .post('/auth/refresh')
+      .then((res) => {
+        if (res.data?.csrfToken) setCsrfToken(res.data.csrfToken);
+        return res;
+      })
       .finally(() => {
         refreshPromise = null;
       });

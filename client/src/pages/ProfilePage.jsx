@@ -23,7 +23,7 @@ export default function ProfilePage() {
 
   // Edit Profile Modal
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', student_id: '' });
+  const [editForm, setEditForm] = useState({ name: '', student_id: '', contact_number: '', organization: '' });
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
@@ -70,7 +70,9 @@ export default function ProfilePage() {
   const openEditModal = () => {
     setEditForm({
       name: profile.name || '',
-      student_id: profile.student_id || ''
+      student_id: profile.student_id || '',
+      contact_number: profile.contact_number || '',
+      organization: profile.organization || '',
     });
     setEditModalOpen(true);
   };
@@ -101,6 +103,7 @@ export default function ProfilePage() {
 
   const isOwner = user && user.id === parseInt(id, 10);
   const isStudent = profile.role === 'student';
+  const isRecruiter = profile.role === 'recruiter';
 
   return (
     <div className="min-h-screen pt-24 pb-20 bg-gray-50/50">
@@ -137,10 +140,17 @@ export default function ProfilePage() {
                       {profile.role}
                     </span>
                   </div>
+                  {profile.username && (
+                    <p className="text-gray-400 text-sm mt-1">@{profile.username}</p>
+                  )}
                   {isStudent && profile.student_id && (
                     <p className="text-emerald-600 font-medium text-sm mt-1">{profile.student_id}</p>
                   )}
+                  {isRecruiter && profile.organization && (
+                    <p className="text-emerald-600 font-medium text-sm mt-1">{profile.organization}</p>
+                  )}
                   {profile.email && <p className="text-gray-500 text-sm mt-1">{profile.email}</p>}
+                  {profile.contact_number && <p className="text-gray-500 text-sm mt-1">{profile.contact_number}</p>}
                 </div>
                 
                 <div className="flex items-center gap-3">
@@ -253,6 +263,34 @@ export default function ProfilePage() {
                   />
                 </div>
               )}
+
+              {isRecruiter && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Organization / Business Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.organization}
+                    onChange={e => setEditForm({ ...editForm, organization: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
+                    placeholder="e.g. Acme Corp"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Contact Number
+                </label>
+                <input
+                  type="tel"
+                  value={editForm.contact_number}
+                  onChange={e => setEditForm({ ...editForm, contact_number: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
+                  placeholder="e.g. +94 71 234 5678"
+                />
+              </div>
 
               <div className="pt-2">
                 <button
